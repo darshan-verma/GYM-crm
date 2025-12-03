@@ -1,0 +1,310 @@
+// Pro Bodyline Fitness CRM - Database Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  TRAINER
+  RECEPTIONIST
+}
+
+enum MembershipStatus {
+  ACTIVE
+  EXPIRED
+  SUSPENDED
+  PENDING
+}
+
+enum PaymentMode {
+  CASH
+  ONLINE
+  UPI
+  CARD
+  BANK_TRANSFER
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  FOLLOW_UP
+  CONVERTED
+  LOST
+}
+
+enum LeadSource {
+  WALK_IN
+  PHONE_CALL
+  WEBSITE
+  SOCIAL_MEDIA
+  REFERRAL
+  OTHER
+}
+
+enum NotificationType {
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      UserRole @default(RECEPTIONIST)
+  phone     String?
+  avatar    String?
+  active    Boolean  @default(true)
+  lastLogin DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  trainedMembers Member[]      @relation("TrainerMembers")
+  activityLogs   ActivityLog[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Member {
+  id                 String            @id @default(cuid())
+  membershipNumber   String            @unique
+  name               String
+  email              String?
+  phone              String
+  address            String?
+  city               String?
+  state              String?
+  pincode            String?
+  dateOfBirth        DateTime?
+  gender             String?
+  photo              String?
+  emergencyContact   String?
+  emergencyName      String?
+  bloodGroup         String?
+  medicalConditions  String?
+  joiningDate        DateTime          @default(now())
+  status             MembershipStatus  @default(PENDING)
+  notes              String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  trainerId String?
+  trainer   User?   @relation("TrainerMembers", fields: [trainerId], references: [id], onDelete: SetNull)
+
+  memberships  Membership[]
+  payments     Payment[]
+  attendance   Attendance[]
+  workoutPlans WorkoutPlan[]
+  dietPlans    DietPlan[]
+
+  @@index([phone])
+  @@index([status])
+  @@index([trainerId])
+  @@index([createdAt])
+}
+
+model MembershipPlan {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  duration    Int // in days
+  price       Decimal  @db.Decimal(10, 2)
+  features    Json? // ["Gym Access", "Locker", "Trainer"]
+  color       String? // for UI color coding
+  popular     Boolean  @default(false)
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships Membership[]
+
+  @@index([active])
+}
+
+model Membership {
+  id           String   @id @default(cuid())
+  memberId     String
+  planId       String
+  startDate    DateTime @default(now())
+  endDate      DateTime
+  amount       Decimal  @db.Decimal(10, 2)
+  discount     Decimal? @db.Decimal(10, 2)
+  discountType String? // PERCENTAGE or FIXED
+  finalAmount  Decimal  @db.Decimal(10, 2)
+  active       Boolean  @default(true)
+  autoRenew    Boolean  @default(false)
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  member Member         @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  plan   MembershipPlan @relation(fields: [planId], references: [id])
+
+  @@index([memberId])
+  @@index([planId])
+  @@index([endDate])
+  @@index([active])
+}
+
+model Payment {
+  id              String      @id @default(cuid())
+  memberId        String
+  amount          Decimal     @db.Decimal(10, 2)
+  paymentMode     PaymentMode
+  paymentDate     DateTime    @default(now())
+  transactionId   String?
+  invoiceNumber   String      @unique
+  referenceNumber String?
+  notes           String?
+  receiptPath     String?
+  createdBy       String?
+  createdAt       DateTime    @default(now())
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId])
+  @@index([paymentDate])
+  @@index([invoiceNumber])
+}
+
+model Attendance {
+  id       String    @id @default(cuid())
+  memberId String
+  checkIn  DateTime  @default(now())
+  checkOut DateTime?
+  date     DateTime  @default(now()) @db.Date
+  duration Int? // in minutes
+  notes    String?
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, date])
+  @@index([date])
+  @@index([memberId])
+}
+
+model Lead {
+  id              String      @id @default(cuid())
+  name            String
+  phone           String
+  email           String?
+  age             Int?
+  gender          String?
+  source          LeadSource  @default(WALK_IN)
+  status          LeadStatus  @default(NEW)
+  interestedPlan  String?
+  budget          Decimal?    @db.Decimal(10, 2)
+  preferredTime   String?
+  notes           String?
+  followUpDate    DateTime?
+  lastContactDate DateTime?
+  convertedDate   DateTime?
+  assignedTo      String?
+  priority        String? // HIGH, MEDIUM, LOW
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([status])
+  @@index([source])
+  @@index([followUpDate])
+  @@index([createdAt])
+}
+
+model WorkoutPlan {
+  id          String   @id @default(cuid())
+  memberId    String
+  name        String
+  description String?
+  exercises   Json // [{name, sets, reps, weight, restTime, notes, videoUrl}]
+  difficulty  String? // BEGINNER, INTERMEDIATE, ADVANCED
+  goal        String? // WEIGHT_LOSS, MUSCLE_GAIN, ENDURANCE
+  startDate   DateTime @default(now())
+  endDate     DateTime?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId])
+  @@index([active])
+}
+
+model DietPlan {
+  id            String   @id @default(cuid())
+  memberId      String
+  name          String
+  description   String?
+  meals         Json // [{mealTime, items, calories, protein, carbs, fats, notes}]
+  totalCalories Int?
+  totalProtein  Int?
+  goal          String? // WEIGHT_LOSS, MUSCLE_GAIN, MAINTENANCE
+  startDate     DateTime @default(now())
+  endDate       DateTime?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([memberId])
+  @@index([active])
+}
+
+model Notification {
+  id        String             @id @default(cuid())
+  type      NotificationType
+  recipient String
+  subject   String?
+  message   String
+  status    NotificationStatus @default(PENDING)
+  error     String?
+  sentAt    DateTime?
+  createdAt DateTime           @default(now())
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([type])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String // CREATE, UPDATE, DELETE, LOGIN
+  entity    String // Member, Payment, Lead, etc.
+  entityId  String?
+  details   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([entity])
+  @@index([createdAt])
+}
+
+model SystemSettings {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+}
