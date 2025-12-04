@@ -17,7 +17,8 @@ import {
   Settings,
   Menu,
   X,
-  LogOut
+  LogOut,
+  Shield
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -28,6 +29,7 @@ const navigation = [
   { name: 'Members', href: '/members', icon: Users },
   { name: 'Billing', href: '/billing', icon: CreditCard },
   { name: 'Trainers', href: '/trainers', icon: UserCheck },
+  { name: 'Staff', href: '/staff', icon: Shield },
   { name: 'Attendance', href: '/attendance', icon: Calendar },
   { name: 'Leads', href: '/leads', icon: Megaphone },
   { name: 'Memberships', href: '/memberships', icon: CreditCard },

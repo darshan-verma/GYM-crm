@@ -11,6 +11,12 @@ export async function getMembershipPlans() {
   })
 }
 
+export async function getMembershipPlan(id: string) {
+  return await prisma.membershipPlan.findUnique({
+    where: { id },
+  })
+}
+
 export async function createMembershipPlan(data: {
   name: string
   description?: string
@@ -37,6 +43,70 @@ export async function createMembershipPlan(data: {
     return { success: true, data: plan }
   } catch (error) {
     return { success: false, error: 'Failed to create membership plan' }
+  }
+}
+
+export async function updateMembershipPlan(id: string, data: {
+  name: string
+  description?: string
+  duration: number
+  price: number
+  features?: string[]
+  color?: string
+  popular?: boolean
+  active?: boolean
+}) {
+  const session = await auth()
+  if (!session || session.user.role !== 'ADMIN') {
+    throw new Error('Unauthorized')
+  }
+
+  try {
+    const plan = await prisma.membershipPlan.update({
+      where: { id },
+      data: {
+        ...data,
+        features: data.features || [],
+      },
+    })
+
+    revalidatePath('/memberships')
+    revalidatePath(`/memberships/${id}/edit`)
+    return { success: true, data: plan }
+  } catch (error) {
+    return { success: false, error: 'Failed to update membership plan' }
+  }
+}
+
+export async function deleteMembershipPlan(id: string) {
+  const session = await auth()
+  if (!session || session.user.role !== 'ADMIN') {
+    throw new Error('Unauthorized')
+  }
+
+  try {
+    // Check if plan has active memberships
+    const activeMemberships = await prisma.membership.count({
+      where: { planId: id, active: true },
+    })
+
+    if (activeMemberships > 0) {
+      return { 
+        success: false, 
+        error: `Cannot delete plan with ${activeMemberships} active memberships. Deactivate it instead.` 
+      }
+    }
+
+    // Soft delete by setting active to false
+    await prisma.membershipPlan.update({
+      where: { id },
+      data: { active: false },
+    })
+
+    revalidatePath('/memberships')
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: 'Failed to delete membership plan' }
   }
 }
 

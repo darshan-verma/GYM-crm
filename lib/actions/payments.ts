@@ -122,6 +122,25 @@ export async function createPayment(data: {
   }
 }
 
+export async function getPayment(id: string) {
+  return await prisma.payment.findUnique({
+    where: { id },
+    include: {
+      member: {
+        include: {
+          memberships: {
+            where: { active: true },
+            include: { plan: true }
+          }
+        }
+      },
+      membership: {
+        include: { plan: true }
+      }
+    }
+  })
+}
+
 export async function getPayments(params?: {
   memberId?: string
   startDate?: string
