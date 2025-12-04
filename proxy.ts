@@ -5,19 +5,20 @@ export default auth((req) => {
   const isLoggedIn = !!req.auth
   const isAuthPage = req.nextUrl.pathname.startsWith('/login') || req.nextUrl.pathname.startsWith('/register')
   const isPublicAPI = req.nextUrl.pathname.startsWith('/api/public')
+  const isRootPath = req.nextUrl.pathname === '/'
 
   // Allow public API routes
   if (isPublicAPI) {
     return NextResponse.next()
   }
 
-  // Redirect logged-in users away from login page
+  // Redirect logged-in users away from login page to dashboard
   if (isAuthPage && isLoggedIn) {
     return NextResponse.redirect(new URL('/', req.url))
   }
 
-  // Require auth for all dashboard routes
-  if (!isAuthPage && !isLoggedIn) {
+  // Require auth for all non-auth pages (except root which has its own handler)
+  if (!isAuthPage && !isRootPath && !isLoggedIn) {
     return NextResponse.redirect(new URL('/login', req.url))
   }
 
