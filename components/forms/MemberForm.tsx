@@ -39,7 +39,7 @@ export default function MemberForm({ trainers, initialData, isEdit = false }: Me
         ? await updateMember(initialData.id, formData)
         : await createMember(formData)
 
-      if (result.success) {
+      if (result.success && result.data) {
         toast.success(
           isEdit ? 'Member updated successfully' : 'Member created successfully'
         )
