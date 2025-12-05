@@ -133,9 +133,6 @@ export async function getPayment(id: string) {
             include: { plan: true }
           }
         }
-      },
-      membership: {
-        include: { plan: true }
       }
     }
   })

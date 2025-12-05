@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/select'
 import { X, Plus, Trash2 } from 'lucide-react'
 import { createWorkoutPlan } from '@/lib/actions/workouts'
-import { exerciseLibrary } from '@/lib/actions/workouts'
+import { exerciseLibrary } from '@/lib/data/exercise-library'
 
 interface WorkoutFormProps {
   members: Array<{ id: string; name: string; membershipNumber: string }>

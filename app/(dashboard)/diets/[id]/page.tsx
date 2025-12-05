@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { getDietPlan, foodDatabase } from '@/lib/actions/diets'
+import { auth } from '@/lib/auth'
+import { getDietPlan } from '@/lib/actions/diets'
+import { foodDatabase } from '@/lib/data/food-database'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -21,7 +21,7 @@ export default async function DietDetailPage({
 }: {
   params: { id: string }
 }) {
-  const session = await getServerSession(authOptions)
+  const session = await auth()
   if (!session) {
     redirect('/login')
   }
@@ -129,9 +129,9 @@ export default async function DietDetailPage({
             <div className="flex items-center gap-2">
               <Flame className="h-5 w-5 text-orange-600" />
               <span className="text-2xl font-bold">
-                {plan.calorieTarget || 'N/A'}
+                {plan.totalCalories || 'N/A'}
               </span>
-              {plan.calorieTarget && <span className="text-gray-600">kcal</span>}
+              {plan.totalCalories && <span className="text-gray-600">kcal</span>}
             </div>
           </CardContent>
         </Card>
@@ -146,9 +146,9 @@ export default async function DietDetailPage({
             <div className="flex items-center gap-2">
               <Target className="h-5 w-5 text-purple-600" />
               <span className="text-2xl font-bold">
-                {plan.proteinTarget || 'N/A'}
+                {plan.totalProtein || 'N/A'}
               </span>
-              {plan.proteinTarget && <span className="text-gray-600">g</span>}
+              {plan.totalProtein && <span className="text-gray-600">g</span>}
             </div>
           </CardContent>
         </Card>
@@ -156,16 +156,15 @@ export default async function DietDetailPage({
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-gray-600">
-              Carbs Target
+              Goal
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
               <Target className="h-5 w-5 text-blue-600" />
               <span className="text-2xl font-bold">
-                {plan.carbTarget || 'N/A'}
+                {plan.goal ? plan.goal.replace('_', ' ') : 'N/A'}
               </span>
-              {plan.carbTarget && <span className="text-gray-600">g</span>}
             </div>
           </CardContent>
         </Card>
@@ -173,16 +172,16 @@ export default async function DietDetailPage({
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium text-gray-600">
-              Fat Target
+              Total Meals
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
-              <Target className="h-5 w-5 text-yellow-600" />
+              <UtensilsCrossed className="h-5 w-5 text-purple-600" />
               <span className="text-2xl font-bold">
-                {plan.fatTarget || 'N/A'}
+                {meals.length}
               </span>
-              {plan.fatTarget && <span className="text-gray-600">g</span>}
+              <span className="text-gray-600">per day</span>
             </div>
           </CardContent>
         </Card>
@@ -273,11 +272,11 @@ export default async function DietDetailPage({
               <CardTitle className="text-sm">Plan Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {plan.dietType && (
+              {plan.goal && (
                 <div>
-                  <div className="text-sm text-gray-600 mb-1">Diet Type</div>
-                  <Badge className={getDietTypeColor(plan.dietType)}>
-                    {plan.dietType.replace('_', ' ')}
+                  <div className="text-sm text-gray-600 mb-1">Goal</div>
+                  <Badge className={getDietTypeColor(plan.goal)}>
+                    {plan.goal.replace('_', ' ')}
                   </Badge>
                 </div>
               )}
@@ -291,14 +290,6 @@ export default async function DietDetailPage({
                     {plan.endDate &&
                       ` - ${new Date(plan.endDate).toLocaleDateString()}`}
                   </span>
-                </div>
-              </div>
-
-              <div>
-                <div className="text-sm text-gray-600 mb-1">Total Meals</div>
-                <div className="flex items-center gap-2 text-sm">
-                  <UtensilsCrossed className="h-4 w-4" />
-                  <span>{meals.length} meals per day</span>
                 </div>
               </div>
 

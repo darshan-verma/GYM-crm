@@ -14,10 +14,21 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { createDietPlan } from '@/lib/actions/diets'
+import { updateDietPlan, deleteDietPlan } from '@/lib/actions/diets'
 import { foodDatabase } from '@/lib/data/food-database'
 import { Plus, Trash2, UtensilsCrossed } from 'lucide-react'
 import { toast } from 'sonner'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 
 interface Member {
   id: string
@@ -36,33 +47,55 @@ interface Meal {
   foods: FoodItem[]
 }
 
-export default function DietForm({ members }: { members: Member[] }) {
+interface DietPlan {
+  id: string
+  name: string
+  description: string | null
+  memberId: string
+  goal: string | null
+  totalCalories: number | null
+  totalProtein: number | null
+  startDate: Date
+  endDate: Date | null
+  meals: any
+  active: boolean
+}
+
+export default function DietEditForm({
+  plan,
+  members,
+}: {
+  plan: DietPlan
+  members: Member[]
+}) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL')
 
   const [formData, setFormData] = useState({
-    memberId: '',
-    name: '',
-    description: '',
-    dietType: '',
-    calorieTarget: 0,
-    proteinTarget: 0,
-    carbTarget: 0,
-    fatTarget: 0,
-    startDate: '',
-    endDate: '',
+    memberId: plan.memberId,
+    name: plan.name,
+    description: plan.description || '',
+    goal: plan.goal || '',
+    totalCalories: plan.totalCalories || 0,
+    totalProtein: plan.totalProtein || 0,
+    startDate: new Date(plan.startDate).toISOString().split('T')[0],
+    endDate: plan.endDate ? new Date(plan.endDate).toISOString().split('T')[0] : '',
+    active: plan.active,
   })
 
-  const [meals, setMeals] = useState<Meal[]>([
-    { mealName: 'Breakfast', foods: [] },
-  ])
+  const [meals, setMeals] = useState<Meal[]>(
+    Array.isArray(plan.meals) && plan.meals.length > 0
+      ? plan.meals
+      : [{ mealName: 'Breakfast', foods: [] }]
+  )
 
   const categories = ['ALL', 'PROTEIN', 'CARBS', 'VEGETABLES', 'FRUITS', 'FATS', 'SNACKS']
 
-  const filteredFoods = selectedCategory === 'ALL'
-    ? foodDatabase
-    : foodDatabase.filter(food => food.category === selectedCategory)
+  const filteredFoods =
+    selectedCategory === 'ALL'
+      ? foodDatabase
+      : foodDatabase.filter((food) => food.category === selectedCategory)
 
   const addMeal = () => {
     setMeals([...meals, { mealName: '', foods: [] }])
@@ -90,7 +123,12 @@ export default function DietForm({ members }: { members: Member[] }) {
     setMeals(updated)
   }
 
-  const updateFood = (mealIndex: number, foodIndex: number, field: keyof FoodItem, value: any) => {
+  const updateFood = (
+    mealIndex: number,
+    foodIndex: number,
+    field: keyof FoodItem,
+    value: any
+  ) => {
     const updated = [...meals]
     updated[mealIndex].foods[foodIndex] = {
       ...updated[mealIndex].foods[foodIndex],
@@ -105,9 +143,9 @@ export default function DietForm({ members }: { members: Member[] }) {
     let totalCarbs = 0
     let totalFat = 0
 
-    meals.forEach(meal => {
-      meal.foods.forEach(foodItem => {
-        const food = foodDatabase.find(f => f.name === foodItem.foodName)
+    meals.forEach((meal) => {
+      meal.foods.forEach((foodItem) => {
+        const food = foodDatabase.find((f) => f.name === foodItem.foodName)
         if (food) {
           const portion = foodItem.portion || 1
           totalCalories += food.calories * portion
@@ -133,22 +171,17 @@ export default function DietForm({ members }: { members: Member[] }) {
     setLoading(true)
 
     try {
-      if (!formData.memberId) {
-        toast.error('Please select a member')
-        return
-      }
-
       if (!formData.name.trim()) {
         toast.error('Please enter a diet plan name')
         return
       }
 
-      if (meals.length === 0 || meals.every(m => m.foods.length === 0)) {
+      if (meals.length === 0 || meals.every((m) => m.foods.length === 0)) {
         toast.error('Please add at least one meal with foods')
         return
       }
 
-      const result = await createDietPlan({
+      const result = await updateDietPlan(plan.id, {
         ...formData,
         startDate: formData.startDate ? new Date(formData.startDate) : undefined,
         endDate: formData.endDate ? new Date(formData.endDate) : undefined,
@@ -156,14 +189,32 @@ export default function DietForm({ members }: { members: Member[] }) {
       })
 
       if (result.success) {
-        toast.success('Diet plan created successfully')
+        toast.success('Diet plan updated successfully')
+        router.push(`/diets/${plan.id}`)
+        router.refresh()
+      } else {
+        toast.error(result.error || 'Failed to update diet plan')
+      }
+    } catch (error) {
+      console.error('Error updating diet plan:', error)
+      toast.error('An error occurred')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    setLoading(true)
+    try {
+      const result = await deleteDietPlan(plan.id)
+      if (result.success) {
+        toast.success('Diet plan deleted successfully')
         router.push('/diets')
         router.refresh()
       } else {
-        toast.error(result.error || 'Failed to create diet plan')
+        toast.error(result.error || 'Failed to delete diet plan')
       }
     } catch (error) {
-      console.error('Error creating diet plan:', error)
       toast.error('An error occurred')
     } finally {
       setLoading(false)
@@ -225,37 +276,35 @@ export default function DietForm({ members }: { members: Member[] }) {
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="dietType">Diet Type</Label>
+            <div>
+              <Label htmlFor="goal">Goal</Label>
               <Select
-                value={formData.dietType}
+                value={formData.goal}
                 onValueChange={(value) =>
-                  setFormData({ ...formData, dietType: value })
+                  setFormData({ ...formData, goal: value })
                 }
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select diet type" />
+                  <SelectValue placeholder="Select goal" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="WEIGHT_LOSS">Weight Loss</SelectItem>
                   <SelectItem value="MUSCLE_GAIN">Muscle Gain</SelectItem>
                   <SelectItem value="MAINTENANCE">Maintenance</SelectItem>
-                  <SelectItem value="KETO">Keto</SelectItem>
-                  <SelectItem value="VEGETARIAN">Vegetarian</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="calorieTarget">Daily Calorie Target</Label>
+              <Label htmlFor="totalCalories">Daily Calorie Target</Label>
               <Input
-                id="calorieTarget"
+                id="totalCalories"
                 type="number"
-                value={formData.calorieTarget || ''}
+                value={formData.totalCalories || ''}
                 onChange={(e) =>
                   setFormData({
                     ...formData,
-                    calorieTarget: parseInt(e.target.value) || 0,
+                    totalCalories: parseInt(e.target.value) || 0,
                   })
                 }
                 placeholder="e.g., 2000"
@@ -263,52 +312,20 @@ export default function DietForm({ members }: { members: Member[] }) {
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="proteinTarget">Protein Target (g)</Label>
+              <Label htmlFor="totalProtein">Protein Target (g)</Label>
               <Input
-                id="proteinTarget"
+                id="totalProtein"
                 type="number"
-                value={formData.proteinTarget || ''}
+                value={formData.totalProtein || ''}
                 onChange={(e) =>
                   setFormData({
                     ...formData,
-                    proteinTarget: parseInt(e.target.value) || 0,
+                    totalProtein: parseInt(e.target.value) || 0,
                   })
                 }
                 placeholder="e.g., 150"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="carbTarget">Carbs Target (g)</Label>
-              <Input
-                id="carbTarget"
-                type="number"
-                value={formData.carbTarget || ''}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    carbTarget: parseInt(e.target.value) || 0,
-                  })
-                }
-                placeholder="e.g., 200"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="fatTarget">Fat Target (g)</Label>
-              <Input
-                id="fatTarget"
-                type="number"
-                value={formData.fatTarget || ''}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    fatTarget: parseInt(e.target.value) || 0,
-                  })
-                }
-                placeholder="e.g., 60"
               />
             </div>
           </div>
@@ -338,6 +355,19 @@ export default function DietForm({ members }: { members: Member[] }) {
                 }
               />
             </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              id="active"
+              checked={formData.active}
+              onChange={(e) =>
+                setFormData({ ...formData, active: e.target.checked })
+              }
+              className="rounded border-gray-300"
+            />
+            <Label htmlFor="active">Active Plan</Label>
           </div>
         </CardContent>
       </Card>
@@ -382,15 +412,21 @@ export default function DietForm({ members }: { members: Member[] }) {
 
                   <div className="space-y-3">
                     {meal.foods.map((food, foodIndex) => {
-                      const foodItem = foodDatabase.find(f => f.name === food.foodName)
+                      const foodItem = foodDatabase.find(
+                        (f) => f.name === food.foodName
+                      )
                       return (
-                        <div key={foodIndex} className="flex gap-2 items-end bg-gray-50 p-3 rounded">
+                        <div
+                          key={foodIndex}
+                          className="flex gap-2 items-end bg-gray-50 p-3 rounded"
+                        >
                           <div className="flex-1">
                             <Label className="text-xs">Food</Label>
                             <div className="text-sm font-medium">{food.foodName}</div>
                             {foodItem && (
                               <div className="text-xs text-gray-600">
-                                {foodItem.calories} cal | P: {foodItem.protein}g | C: {foodItem.carbs}g | F: {foodItem.fat}g
+                                {foodItem.calories} cal | P: {foodItem.protein}g | C:{' '}
+                                {foodItem.carbs}g | F: {foodItem.fat}g
                               </div>
                             )}
                           </div>
@@ -400,7 +436,12 @@ export default function DietForm({ members }: { members: Member[] }) {
                               type="number"
                               value={food.portion}
                               onChange={(e) =>
-                                updateFood(mealIndex, foodIndex, 'portion', parseFloat(e.target.value) || 1)
+                                updateFood(
+                                  mealIndex,
+                                  foodIndex,
+                                  'portion',
+                                  parseFloat(e.target.value) || 1
+                                )
                               }
                               step="0.5"
                               min="0.5"
@@ -441,12 +482,12 @@ export default function DietForm({ members }: { members: Member[] }) {
                   <div className="border-t pt-3">
                     <Label className="mb-2 block">Add Food to Meal</Label>
                     <div className="flex gap-2 mb-3 flex-wrap">
-                      {categories.map(cat => (
+                      {categories.map((cat) => (
                         <Button
                           key={cat}
                           type="button"
                           size="sm"
-                          variant={selectedCategory === cat ? "default" : "outline"}
+                          variant={selectedCategory === cat ? 'default' : 'outline'}
                           onClick={() => setSelectedCategory(cat)}
                         >
                           {cat}
@@ -465,9 +506,7 @@ export default function DietForm({ members }: { members: Member[] }) {
                         >
                           <div>
                             <div className="font-medium text-sm">{food.name}</div>
-                            <div className="text-xs text-gray-600">
-                              {food.calories} cal
-                            </div>
+                            <div className="text-xs text-gray-600">{food.calories} cal</div>
                           </div>
                         </Button>
                       ))}
@@ -514,6 +553,29 @@ export default function DietForm({ members }: { members: Member[] }) {
       </Card>
 
       <div className="flex gap-4">
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button type="button" variant="destructive" disabled={loading}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Plan
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete this diet plan. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDelete} className="bg-red-600">
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         <Button
           type="button"
           variant="outline"
@@ -522,8 +584,8 @@ export default function DietForm({ members }: { members: Member[] }) {
         >
           Cancel
         </Button>
-        <Button type="submit" disabled={loading}>
-          {loading ? 'Creating...' : 'Create Diet Plan'}
+        <Button type="submit" disabled={loading} className="ml-auto">
+          {loading ? 'Saving...' : 'Save Changes'}
         </Button>
       </div>
     </form>

@@ -45,7 +45,7 @@ export default async function InvoiceDetailPage({
             <Printer className="h-4 w-4 mr-2" />
             Print
           </Button>
-          <Link href={`/api/invoices/${payment.id}/pdf`}>
+          <Link href={`/api/invoices/${payment.id}/download`} target="_blank">
             <Button>
               <Download className="h-4 w-4 mr-2" />
               Download PDF

@@ -1,17 +1,15 @@
 import { redirect } from 'next/navigation'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { auth } from '@/lib/auth'
 import prisma from '@/lib/db/prisma'
 import DietForm from '@/components/forms/DietForm'
 
 export default async function NewDietPage() {
-  const session = await getServerSession(authOptions)
+  const session = await auth()
   if (!session) {
     redirect('/login')
   }
 
-  const members = await prisma.user.findMany({
-    where: { role: 'MEMBER', active: true },
+  const members = await prisma.member.findMany({
     select: {
       id: true,
       name: true,
