@@ -40,7 +40,7 @@ export async function createMembershipPlan(data: {
     })
 
     revalidatePath('/memberships')
-    return { success: true, data: plan }
+    return { success: true }
   } catch (error) {
     return { success: false, error: 'Failed to create membership plan' }
   }
@@ -72,7 +72,7 @@ export async function updateMembershipPlan(id: string, data: {
 
     revalidatePath('/memberships')
     revalidatePath(`/memberships/${id}/edit`)
-    return { success: true, data: plan }
+    return { success: true }
   } catch (error) {
     return { success: false, error: 'Failed to update membership plan' }
   }

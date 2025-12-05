@@ -59,11 +59,11 @@ export function MembershipPlanEditForm({ planId, initialData }: MembershipPlanEd
       price: parseFloat(formData.price.toString()),
     })
 
-    if (result.success) {
+    if (result?.success) {
       router.push('/memberships')
       router.refresh()
     } else {
-      setError(result.error || 'Something went wrong')
+      setError(result?.error || 'Something went wrong')
     }
     setLoading(false)
   }
@@ -78,11 +78,11 @@ export function MembershipPlanEditForm({ planId, initialData }: MembershipPlanEd
 
     const result = await deleteMembershipPlan(planId)
 
-    if (result.success) {
+    if (result?.success) {
       router.push('/memberships')
       router.refresh()
     } else {
-      setError(result.error || 'Failed to delete plan')
+      setError(result?.error || 'Failed to delete plan')
     }
     setLoading(false)
   }
@@ -146,7 +146,7 @@ export function MembershipPlanEditForm({ planId, initialData }: MembershipPlanEd
             type="number"
             min="1"
             value={formData.duration}
-            onChange={(e) => setFormData(prev => ({ ...prev, duration: parseInt(e.target.value) }))}
+            onChange={(e) => setFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
             required
           />
         </div>
@@ -159,7 +159,7 @@ export function MembershipPlanEditForm({ planId, initialData }: MembershipPlanEd
             min="0"
             step="0.01"
             value={formData.price}
-            onChange={(e) => setFormData(prev => ({ ...prev, price: parseFloat(e.target.value) }))}
+            onChange={(e) => setFormData(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
             required
           />
         </div>

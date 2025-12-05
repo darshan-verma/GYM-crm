@@ -40,7 +40,7 @@ export default async function EditMembershipPlanPage({
             name: plan.name,
             description: plan.description || '',
             duration: plan.duration,
-            price: Number(plan.price),
+            price: parseFloat(plan.price.toString()),
             features: plan.features as string[],
             color: plan.color || '#3b82f6',
             popular: plan.popular,
