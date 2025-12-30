@@ -50,7 +50,6 @@ export default function PaymentForm({ members }: PaymentFormProps) {
 				| "UPI"
 				| "CARD"
 				| "BANK_TRANSFER",
-			transactionId: (formData.get("transactionId") as string) || undefined,
 			notes: (formData.get("notes") as string) || undefined,
 			membershipId: (formData.get("membershipId") as string) || undefined,
 		};
@@ -112,7 +111,7 @@ export default function PaymentForm({ members }: PaymentFormProps) {
 								<SelectValue placeholder="Select membership to renew" />
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value="">No specific membership</SelectItem>
+								<SelectItem value="none">No specific membership</SelectItem>
 								{selectedMemberData.memberships.map((membership) => (
 									<SelectItem key={membership.id} value={membership.id}>
 										{membership.plan.name} - Expires:{" "}
@@ -154,17 +153,6 @@ export default function PaymentForm({ members }: PaymentFormProps) {
 							<SelectItem value="BANK_TRANSFER">Bank Transfer</SelectItem>
 						</SelectContent>
 					</Select>
-				</div>
-
-				{/* Transaction ID */}
-				<div className="space-y-2">
-					<Label htmlFor="transactionId">Transaction ID (Optional)</Label>
-					<Input
-						id="transactionId"
-						name="transactionId"
-						placeholder="Transaction reference"
-						disabled={loading}
-					/>
 				</div>
 			</div>
 

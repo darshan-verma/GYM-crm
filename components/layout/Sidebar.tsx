@@ -25,18 +25,18 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { signOut } from 'next-auth/react'
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Members', href: '/members', icon: Users },
-  { name: 'Billing', href: '/billing', icon: CreditCard },
-  { name: 'Trainers', href: '/trainers', icon: UserCheck },
-  { name: 'Staff', href: '/staff', icon: Shield },
-  { name: 'Attendance', href: '/attendance', icon: Calendar },
-  { name: 'Leads', href: '/leads', icon: Megaphone },
-  { name: 'Memberships', href: '/memberships', icon: CreditCard },
-  { name: 'Workouts', href: '/workouts', icon: Dumbbell },
-  { name: 'Diet Plans', href: '/diets', icon: UtensilsCrossed },
-  { name: 'Reports', href: '/reports', icon: BarChart3 },
-  { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Dashboard', href: '/', icon: LayoutDashboard, roles: ['ADMIN', 'TRAINER', 'RECEPTIONIST'] },
+  { name: 'Members', href: '/members', icon: Users, roles: ['ADMIN', 'TRAINER', 'RECEPTIONIST'] },
+  { name: 'Billing', href: '/billing', icon: CreditCard, roles: ['ADMIN', 'RECEPTIONIST'] },
+  { name: 'Trainers', href: '/trainers', icon: UserCheck, roles: ['ADMIN'] },
+  { name: 'Staff', href: '/staff', icon: Shield, roles: ['ADMIN'] },
+  { name: 'Attendance', href: '/attendance', icon: Calendar, roles: ['ADMIN', 'TRAINER', 'RECEPTIONIST'] },
+  { name: 'Leads', href: '/leads', icon: Megaphone, roles: ['ADMIN', 'RECEPTIONIST'] },
+  { name: 'Memberships', href: '/memberships', icon: CreditCard, roles: ['ADMIN'] },
+  { name: 'Workouts', href: '/workouts', icon: Dumbbell, roles: ['ADMIN', 'TRAINER'] },
+  { name: 'Diet Plans', href: '/diets', icon: UtensilsCrossed, roles: ['ADMIN', 'TRAINER'] },
+  { name: 'Reports', href: '/reports', icon: BarChart3, roles: ['ADMIN'] },
+  { name: 'Settings', href: '/settings', icon: Settings, roles: ['ADMIN'] },
 ]
 
 export default function Sidebar({ user }: { user: any }) {
@@ -83,7 +83,9 @@ export default function Sidebar({ user }: { user: any }) {
 
           {/* Navigation */}
           <nav className="flex-1 overflow-y-auto p-4 space-y-1">
-        {navigation.map((item) => {
+        {navigation
+          .filter((item) => item.roles.includes(user?.role || 'RECEPTIONIST'))
+          .map((item) => {
           const isActive = pathname === item.href || 
             (item.href !== '/' && pathname.startsWith(item.href))
           

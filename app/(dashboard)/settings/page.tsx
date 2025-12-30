@@ -1,5 +1,6 @@
 import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
+import { requireAdmin } from '@/lib/utils/permissions'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -12,9 +13,13 @@ import { User, Bell, Shield, Palette, Settings2 } from 'lucide-react'
 
 export default async function SettingsPage() {
   const session = await auth()
-  
+
   if (!session) {
     redirect('/login')
+  }
+
+  if (!requireAdmin(session.user?.role)) {
+    redirect('/')
   }
 
   return (

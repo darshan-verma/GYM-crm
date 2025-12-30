@@ -1,4 +1,7 @@
 import { getTrainers } from '@/lib/actions/trainers'
+import { auth } from '@/lib/auth'
+import { requireAdmin } from '@/lib/utils/permissions'
+import { redirect } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -8,6 +11,12 @@ import Link from 'next/link'
 import { formatPhoneNumber } from '@/lib/utils/format'
 
 export default async function TrainersPage() {
+  const session = await auth()
+
+  if (!requireAdmin(session?.user?.role)) {
+    redirect('/')
+  }
+
   const trainers = await getTrainers()
 
   return (

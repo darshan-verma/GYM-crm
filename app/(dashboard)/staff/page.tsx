@@ -1,10 +1,19 @@
 import { getUsers } from '@/lib/actions/users'
+import { auth } from '@/lib/auth'
+import { requireAdmin } from '@/lib/utils/permissions'
+import { redirect } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { Plus, Mail, Phone, Shield, User, Briefcase } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 
 export default async function StaffPage() {
+  const session = await auth()
+
+  if (!requireAdmin(session?.user?.role)) {
+    redirect('/')
+  }
+
   const users = await getUsers()
 
   const getRoleBadge = (role: string) => {

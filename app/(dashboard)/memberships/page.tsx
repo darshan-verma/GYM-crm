@@ -1,4 +1,7 @@
 import { getMembershipPlans } from '@/lib/actions/memberships'
+import { auth } from '@/lib/auth'
+import { requireAdmin } from '@/lib/utils/permissions'
+import { redirect } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -7,6 +10,12 @@ import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils/format'
 
 export default async function MembershipPlansPage() {
+  const session = await auth()
+
+  if (!requireAdmin(session?.user?.role)) {
+    redirect('/')
+  }
+
   const plans = await getMembershipPlans()
 
   return (

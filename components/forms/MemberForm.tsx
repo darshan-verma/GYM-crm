@@ -19,12 +19,19 @@ import { toast } from "sonner";
 
 interface MemberFormProps {
 	trainers: Array<{ id: string; name: string }>;
+	membershipPlans?: Array<{
+		id: string;
+		name: string;
+		price: number;
+		duration: number;
+	}>;
 	initialData?: any;
 	isEdit?: boolean;
 }
 
 export default function MemberForm({
 	trainers,
+	membershipPlans = [],
 	initialData,
 	isEdit = false,
 }: MemberFormProps) {
@@ -41,6 +48,9 @@ export default function MemberForm({
 		// Handle special values
 		if (formData.get("trainerId") === "none") {
 			formData.set("trainerId", "");
+		}
+		if (formData.get("membershipPlanId") === "none") {
+			formData.set("membershipPlanId", "");
 		}
 
 		try {
@@ -314,6 +324,27 @@ export default function MemberForm({
 								{trainers.map((trainer) => (
 									<SelectItem key={trainer.id} value={trainer.id}>
 										{trainer.name}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+
+					<div className="space-y-2">
+						<Label htmlFor="membershipPlanId">Membership Plan</Label>
+						<Select
+							name="membershipPlanId"
+							defaultValue={initialData?.membershipPlanId || "none"}
+							disabled={loading}
+						>
+							<SelectTrigger>
+								<SelectValue placeholder="Select membership plan" />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="none">No Membership</SelectItem>
+								{membershipPlans.map((plan) => (
+									<SelectItem key={plan.id} value={plan.id}>
+										{plan.name} - ₹{plan.price} ({plan.duration} days)
 									</SelectItem>
 								))}
 							</SelectContent>

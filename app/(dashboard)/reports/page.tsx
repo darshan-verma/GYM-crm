@@ -1,3 +1,6 @@
+import { auth } from '@/lib/auth'
+import { requireAdmin } from '@/lib/utils/permissions'
+import { redirect } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -29,6 +32,12 @@ import AttendanceChart from '@/components/reports/AttendanceChart'
 import LeadsChart from '@/components/reports/LeadsChart'
 
 export default async function ReportsPage() {
+  const session = await auth()
+
+  if (!requireAdmin(session?.user?.role)) {
+    redirect('/')
+  }
+
   const [
     stats,
     revenueData,

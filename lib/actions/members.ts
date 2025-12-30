@@ -28,6 +28,9 @@ export async function createMember(formData: FormData) {
 			notes: (formData.get("notes") as string) || null,
 		};
 
+		const membershipPlanId =
+			(formData.get("membershipPlanId") as string) || null;
+
 		// Generate membership number
 		const lastMember = await prisma.member.findFirst({
 			orderBy: { createdAt: "desc" },
@@ -45,12 +48,38 @@ export async function createMember(formData: FormData) {
 				...data,
 				membershipNumber,
 				dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
-				status: "PENDING",
+				status: membershipPlanId ? "ACTIVE" : "PENDING",
 			},
 			include: {
 				trainer: { select: { name: true } },
 			},
 		});
+
+		// Create membership if plan is selected
+		if (membershipPlanId) {
+			const membershipPlan = await prisma.membershipPlan.findUnique({
+				where: { id: membershipPlanId },
+			});
+
+			if (membershipPlan) {
+				const startDate = new Date();
+				const endDate = new Date(startDate);
+				endDate.setDate(startDate.getDate() + membershipPlan.duration);
+
+				await prisma.membership.create({
+					data: {
+						memberId: member.id,
+						planId: membershipPlanId,
+						startDate,
+						endDate,
+						amount: membershipPlan.price,
+						finalAmount: membershipPlan.price,
+						active: true,
+						autoRenew: false,
+					},
+				});
+			}
+		}
 
 		// Log activity
 		await prisma.activityLog.create({
@@ -62,6 +91,7 @@ export async function createMember(formData: FormData) {
 				details: {
 					membershipNumber,
 					name: member.name,
+					membershipCreated: !!membershipPlanId,
 				},
 			},
 		});
