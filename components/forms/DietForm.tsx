@@ -81,7 +81,11 @@ export default function DietForm({ members }: { members: Member[] }) {
 		setMeals(meals.filter((_, i) => i !== mealIndex));
 	};
 
-	const updateMeal = (mealIndex: number, field: keyof Meal, value: any) => {
+	const updateMeal = (
+		mealIndex: number,
+		field: keyof Meal,
+		value: string | FoodItem[]
+	) => {
 		const updated = [...meals];
 		updated[mealIndex] = { ...updated[mealIndex], [field]: value };
 		setMeals(updated);
@@ -105,7 +109,7 @@ export default function DietForm({ members }: { members: Member[] }) {
 		mealIndex: number,
 		foodIndex: number,
 		field: keyof FoodItem,
-		value: any
+		value: string | number
 	) => {
 		const updated = [...meals];
 		updated[mealIndex].foods[foodIndex] = {
@@ -558,7 +562,7 @@ export default function DietForm({ members }: { members: Member[] }) {
 					{meals.length === 0 && (
 						<div className="text-center py-8 text-gray-500">
 							<UtensilsCrossed className="h-12 w-12 mx-auto mb-2 opacity-50" />
-							<p>No meals added yet. Click "Add Meal" to start.</p>
+							<p>No meals added yet. Click &quot;Add Meal&quot; to start.</p>
 						</div>
 					)}
 				</CardContent>

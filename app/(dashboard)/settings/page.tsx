@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { User, Bell, Shield, Palette, Settings2 } from "lucide-react";
+import { User, Bell, Shield, Palette } from "lucide-react";
 
 export default async function SettingsPage() {
 	const session = await auth();

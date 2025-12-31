@@ -183,7 +183,7 @@ export async function getPayments(params?: {
 		limit = 50,
 	} = params || {};
 
-	const where: any = {};
+	const where: Record<string, unknown> = {};
 
 	if (memberId) {
 		where.memberId = memberId;

@@ -9,9 +9,19 @@ import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
+export interface Trainer {
+	id: string;
+	name: string;
+	email: string;
+	phone: string;
+	specialization: string;
+	experience: number;
+	bio: string;
+}
+
 interface TrainerFormProps {
 	isEdit?: boolean;
-	initialData?: any;
+	initialData?: Trainer;
 }
 
 export default function TrainerForm({
@@ -55,14 +65,14 @@ export default function TrainerForm({
 						? "Trainer updated successfully"
 						: "Trainer created successfully"
 				);
-				router.push(isEdit ? `/trainers/${initialData.id}` : "/trainers");
+				router.push(isEdit ? `/trainers/${initialData!.id}` : "/trainers");
 				router.refresh();
 			} else {
 				toast.error(
 					result.error || `Failed to ${isEdit ? "update" : "create"} trainer`
 				);
 			}
-		} catch (error) {
+		} catch (_error) {
 			toast.error(`Failed to ${isEdit ? "update" : "create"} trainer`);
 		} finally {
 			setLoading(false);

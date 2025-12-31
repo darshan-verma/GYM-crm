@@ -37,7 +37,7 @@ export async function createMembershipPlan(data: {
 	}
 
 	try {
-		const plan = await prisma.membershipPlan.create({
+		const _plan = await prisma.membershipPlan.create({
 			data: {
 				...data,
 				features: data.features || [],
@@ -46,7 +46,7 @@ export async function createMembershipPlan(data: {
 
 		revalidatePath("/memberships");
 		return { success: true };
-	} catch (error) {
+	} catch (_error) {
 		return { success: false, error: "Failed to create membership plan" };
 	}
 }
@@ -70,7 +70,7 @@ export async function updateMembershipPlan(
 	}
 
 	try {
-		const plan = await prisma.membershipPlan.update({
+		const _plan = await prisma.membershipPlan.update({
 			where: { id },
 			data: {
 				...data,
@@ -81,7 +81,7 @@ export async function updateMembershipPlan(
 		revalidatePath("/memberships");
 		revalidatePath(`/memberships/${id}/edit`);
 		return { success: true };
-	} catch (error) {
+	} catch (_error) {
 		return { success: false, error: "Failed to update membership plan" };
 	}
 }
@@ -113,7 +113,7 @@ export async function deleteMembershipPlan(id: string) {
 
 		revalidatePath("/memberships");
 		return { success: true };
-	} catch (error) {
+	} catch (_error) {
 		return { success: false, error: "Failed to delete membership plan" };
 	}
 }
@@ -265,7 +265,7 @@ export async function renewMembership(membershipId: string) {
 
 		revalidatePath(`/members/${currentMembership.memberId}`);
 		return { success: true, data: newMembership };
-	} catch (error) {
+	} catch (_error) {
 		return { success: false, error: "Failed to renew membership" };
 	}
 }

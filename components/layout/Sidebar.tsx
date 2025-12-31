@@ -79,7 +79,17 @@ const navigation = [
 	{ name: "Settings", href: "/settings", icon: Settings, roles: ["ADMIN"] },
 ];
 
-export default function Sidebar({ user }: { user: any }) {
+export default function Sidebar({
+	user,
+}: {
+	user: {
+		id: string;
+		name?: string | null;
+		email?: string | null;
+		role: string;
+		image?: string | null;
+	};
+}) {
 	const pathname = usePathname();
 	const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -160,13 +170,15 @@ export default function Sidebar({ user }: { user: any }) {
 					<div className="p-4 border-t">
 						<div className="flex items-center gap-3 mb-3">
 							<Avatar>
-								<AvatarImage src={user.image} />
+								<AvatarImage src={user.image || undefined} />
 								<AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-700 text-white">
-									{user.name?.charAt(0)}
+									{(user.name || user.email || "U").charAt(0).toUpperCase()}
 								</AvatarFallback>
 							</Avatar>
 							<div className="flex-1 min-w-0">
-								<p className="text-sm font-medium truncate">{user.name}</p>
+								<p className="text-sm font-medium truncate">
+									{user.name || user.email || "User"}
+								</p>
 								<p className="text-xs text-muted-foreground truncate">
 									{user.email}
 								</p>

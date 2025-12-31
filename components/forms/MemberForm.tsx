@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { createMember, updateMember } from "@/lib/actions/members";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,8 +15,33 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Upload } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+
+export interface Member {
+	id: string;
+	name: string;
+	email: string;
+	phone: string;
+	dateOfBirth: Date | null;
+	gender: string;
+	address: string;
+	city?: string;
+	state?: string;
+	pincode?: string;
+	bloodGroup?: string;
+	medicalConditions?: string;
+	emergencyName?: string;
+	emergencyContact: string;
+	emergencyPhone: string;
+	membershipNumber: string;
+	trainerId: string | null;
+	membershipPlanId?: string;
+	photo?: string;
+	notes?: string;
+	status: string;
+	joiningDate: Date;
+}
 
 interface MemberFormProps {
 	trainers: Array<{ id: string; name: string }>;
@@ -25,7 +51,7 @@ interface MemberFormProps {
 		price: number;
 		duration: number;
 	}>;
-	initialData?: any;
+	initialData?: Member;
 	isEdit?: boolean;
 }
 
@@ -55,7 +81,7 @@ export default function MemberForm({
 
 		try {
 			const result = isEdit
-				? await updateMember(initialData.id, formData)
+				? await updateMember(initialData!.id, formData)
 				: await createMember(formData);
 
 			if (result.success && result.data) {
@@ -67,7 +93,7 @@ export default function MemberForm({
 			} else {
 				toast.error(result.error || "Something went wrong");
 			}
-		} catch (error) {
+		} catch (_error) {
 			toast.error("Failed to save member");
 		} finally {
 			setLoading(false);
@@ -92,9 +118,11 @@ export default function MemberForm({
 				<Label>Profile Photo</Label>
 				<div className="flex items-center gap-4">
 					{photoPreview && (
-						<img
+						<Image
 							src={photoPreview}
 							alt="Preview"
+							width={80}
+							height={80}
 							className="w-20 h-20 rounded-full object-cover border-2"
 						/>
 					)}

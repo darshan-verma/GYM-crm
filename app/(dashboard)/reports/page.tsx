@@ -37,6 +37,12 @@ import MembershipChart from "@/components/reports/MembershipChart";
 import AttendanceChart from "@/components/reports/AttendanceChart";
 import LeadsChart from "@/components/reports/LeadsChart";
 
+interface TopPlan {
+	name: string;
+	revenue: number;
+	count: number;
+}
+
 export default async function ReportsPage() {
 	const session = await auth();
 
@@ -259,7 +265,7 @@ export default async function ReportsPage() {
 							</CardHeader>
 							<CardContent>
 								<div className="space-y-3">
-									{topPlans.slice(0, 5).map((plan: any) => (
+									{topPlans.slice(0, 5).map((plan: TopPlan) => (
 										<div
 											key={plan.name}
 											className="flex justify-between items-center p-3 bg-muted/50 rounded-lg"
@@ -309,7 +315,7 @@ export default async function ReportsPage() {
 										);
 										const percentage =
 											total > 0 ? (status.count / total) * 100 : 0;
-										const colors: any = {
+										const colors: Record<string, string> = {
 											ACTIVE: "bg-green-600",
 											EXPIRED: "bg-red-600",
 											SUSPENDED: "bg-orange-600",
@@ -383,7 +389,7 @@ export default async function ReportsPage() {
 					<Card>
 						<CardHeader>
 							<CardTitle>Attendance by Day of Week</CardTitle>
-							<CardDescription>Last month's distribution</CardDescription>
+							<CardDescription>Last month&apos;s distribution</CardDescription>
 						</CardHeader>
 						<CardContent>
 							<div className="space-y-3">

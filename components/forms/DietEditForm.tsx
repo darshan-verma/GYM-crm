@@ -43,8 +43,13 @@ interface FoodItem {
 }
 
 interface Meal {
-	mealName: string;
-	foods: FoodItem[];
+	mealTime: string;
+	items: FoodItem[];
+	calories: number;
+	protein: number;
+	carbs: number;
+	fats: number;
+	notes: string;
 }
 
 interface DietPlan {
@@ -57,7 +62,7 @@ interface DietPlan {
 	totalProtein: number | null;
 	startDate: Date;
 	endDate: Date | null;
-	meals: any;
+	meals: Meal[];
 	active: boolean;
 }
 
@@ -88,15 +93,18 @@ export default function DietEditForm({
 
 	const [meals, setMeals] = useState<Meal[]>(
 		Array.isArray(plan.meals) && plan.meals.length > 0
-			? plan.meals.map((meal: any) => ({
-					mealName: meal.mealTime || meal.mealName || "Meal",
-					foods: (meal.items || meal.foods || []).map((item: any) => ({
-						foodName: item.foodName || item.name,
-						portion: item.portion || 1,
-						unit: item.unit || "serving",
-					})),
-			  }))
-			: [{ mealName: "Breakfast", foods: [] }]
+			? (plan.meals as unknown as Meal[]).map((meal: Meal) => meal)
+			: [
+					{
+						mealTime: "Breakfast",
+						items: [],
+						calories: 0,
+						protein: 0,
+						carbs: 0,
+						fats: 0,
+						notes: "",
+					},
+			  ]
 	);
 
 	const categories = [
@@ -115,14 +123,29 @@ export default function DietEditForm({
 			: foodDatabase.filter((food) => food.category === selectedCategory);
 
 	const addMeal = () => {
-		setMeals([...meals, { mealName: "", foods: [] }]);
+		setMeals([
+			...meals,
+			{
+				mealTime: "",
+				items: [],
+				calories: 0,
+				protein: 0,
+				carbs: 0,
+				fats: 0,
+				notes: "",
+			},
+		]);
 	};
 
 	const removeMeal = (mealIndex: number) => {
 		setMeals(meals.filter((_, i) => i !== mealIndex));
 	};
 
-	const updateMeal = (mealIndex: number, field: keyof Meal, value: any) => {
+	const updateMeal = (
+		mealIndex: number,
+		field: keyof Meal,
+		value: string | number | FoodItem[]
+	) => {
 		const updated = [...meals];
 		updated[mealIndex] = { ...updated[mealIndex], [field]: value };
 		setMeals(updated);
@@ -130,13 +153,13 @@ export default function DietEditForm({
 
 	const addFoodToMeal = (mealIndex: number, foodName: string) => {
 		const updated = [...meals];
-		updated[mealIndex].foods.push({ foodName, portion: 1, unit: "serving" });
+		updated[mealIndex].items.push({ foodName, portion: 1, unit: "serving" });
 		setMeals(updated);
 	};
 
 	const removeFoodFromMeal = (mealIndex: number, foodIndex: number) => {
 		const updated = [...meals];
-		updated[mealIndex].foods = updated[mealIndex].foods.filter(
+		updated[mealIndex].items = updated[mealIndex].items.filter(
 			(_, i) => i !== foodIndex
 		);
 		setMeals(updated);
@@ -146,11 +169,11 @@ export default function DietEditForm({
 		mealIndex: number,
 		foodIndex: number,
 		field: keyof FoodItem,
-		value: any
+		value: string | number
 	) => {
 		const updated = [...meals];
-		updated[mealIndex].foods[foodIndex] = {
-			...updated[mealIndex].foods[foodIndex],
+		updated[mealIndex].items[foodIndex] = {
+			...updated[mealIndex].items[foodIndex],
 			[field]: value,
 		};
 		setMeals(updated);
@@ -163,7 +186,7 @@ export default function DietEditForm({
 		let totalFat = 0;
 
 		meals.forEach((meal) => {
-			meal.foods.forEach((foodItem) => {
+			meal.items.forEach((foodItem) => {
 				const food = foodDatabase.find((f) => f.name === foodItem.foodName);
 				if (food) {
 					let multiplier = foodItem.portion || 1;
@@ -214,7 +237,7 @@ export default function DietEditForm({
 				return;
 			}
 
-			if (meals.length === 0 || meals.every((m) => m.foods.length === 0)) {
+			if (meals.length === 0 || meals.every((m) => m.items.length === 0)) {
 				toast.error("Please add at least one meal with foods");
 				return;
 			}
@@ -254,7 +277,7 @@ export default function DietEditForm({
 			} else {
 				toast.error(result.error || "Failed to delete diet plan");
 			}
-		} catch (error) {
+		} catch (_error) {
 			toast.error("An error occurred");
 		} finally {
 			setLoading(false);
@@ -431,9 +454,9 @@ export default function DietEditForm({
 										<div className="flex-1 space-y-2">
 											<Label>Meal Name</Label>
 											<Input
-												value={meal.mealName}
+												value={meal.mealTime}
 												onChange={(e) =>
-													updateMeal(mealIndex, "mealName", e.target.value)
+													updateMeal(mealIndex, "mealTime", e.target.value)
 												}
 												placeholder="e.g., Breakfast, Lunch, Snack"
 											/>
@@ -451,7 +474,7 @@ export default function DietEditForm({
 									</div>
 
 									<div className="space-y-3">
-										{meal.foods.map((food, foodIndex) => {
+										{meal.items.map((food, foodIndex) => {
 											const foodItem = foodDatabase.find(
 												(f) => f.name === food.foodName
 											);
@@ -570,7 +593,7 @@ export default function DietEditForm({
 					{meals.length === 0 && (
 						<div className="text-center py-8 text-gray-500">
 							<UtensilsCrossed className="h-12 w-12 mx-auto mb-2 opacity-50" />
-							<p>No meals added yet. Click "Add Meal" to start.</p>
+							<p>No meals added yet. Click &quot;Add Meal&quot; to start.</p>
 						</div>
 					)}
 				</CardContent>

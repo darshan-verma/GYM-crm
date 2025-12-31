@@ -3,9 +3,8 @@ import { getMembers, getTrainers } from "@/lib/actions/members";
 import { Button } from "@/components/ui/button";
 import { Plus, Download } from "lucide-react";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import MembersTable from "@/components/members/MembersTable";
-import type { Member } from "@prisma/client";
 
 interface SearchParams {
 	search?: string;

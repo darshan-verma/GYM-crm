@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import TrainerForm from "@/components/forms/TrainerForm";
+import TrainerForm, { Trainer } from "@/components/forms/TrainerForm";
 
 export default async function EditTrainerPage({
 	params,
@@ -41,7 +41,10 @@ export default async function EditTrainerPage({
 					<CardTitle>Trainer Information</CardTitle>
 				</CardHeader>
 				<CardContent>
-					<TrainerForm isEdit={true} initialData={trainer} />
+					<TrainerForm
+						isEdit={true}
+						initialData={trainer as unknown as Trainer}
+					/>
 				</CardContent>
 			</Card>
 		</div>

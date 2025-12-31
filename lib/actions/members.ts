@@ -113,7 +113,7 @@ export async function getMembers(params?: {
 }) {
 	const { search, status, trainerId, page = 1, limit = 20 } = params || {};
 
-	const where: any = {};
+	const where: Record<string, unknown> = {};
 
 	if (search) {
 		where.OR = [
@@ -228,7 +228,7 @@ export async function updateMember(id: string, formData: FormData) {
 		revalidatePath(`/members/${id}`);
 		revalidatePath("/members");
 		return { success: true, data: member };
-	} catch (error) {
+	} catch (_error) {
 		return { success: false, error: "Failed to update member" };
 	}
 }
@@ -256,7 +256,7 @@ export async function deleteMember(id: string) {
 
 		revalidatePath("/members");
 		return { success: true };
-	} catch (error) {
+	} catch (_error) {
 		return { success: false, error: "Failed to delete member" };
 	}
 }

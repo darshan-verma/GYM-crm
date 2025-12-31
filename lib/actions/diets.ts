@@ -3,9 +3,26 @@
 import prisma from "@/lib/db/prisma";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
+
+interface FoodItem {
+	foodName: string;
+	portion: number;
+	unit: string;
+}
+
+interface Meal {
+	mealTime: string;
+	items: FoodItem[];
+	calories: number;
+	protein: number;
+	carbs: number;
+	fats: number;
+	notes: string;
+}
 
 export async function getDietPlans(memberId?: string) {
-	const where: any = {};
+	const where: Record<string, unknown> = {};
 
 	if (memberId) {
 		where.memberId = memberId;
@@ -47,7 +64,7 @@ export async function createDietPlan(data: {
 	memberId: string;
 	name: string;
 	description?: string;
-	meals: any[];
+	meals: Meal[];
 	calorieTarget?: number;
 	proteinTarget?: number;
 	carbTarget?: number;
@@ -67,10 +84,10 @@ export async function createDietPlan(data: {
 		// Import food database for calculations
 		const { foodDatabase } = await import("@/lib/data/food-database");
 
-		data.meals.forEach((meal: any) => {
-			const foodItems = meal.items || meal.foods || [];
-			foodItems.forEach((foodItem: any) => {
-				const foodName = foodItem.foodName || foodItem.name;
+		data.meals.forEach((meal: Meal) => {
+			const foodItems = meal.items;
+			foodItems.forEach((foodItem: FoodItem) => {
+				const foodName = foodItem.foodName;
 				const food = foodDatabase.find((f) => f.name === foodName);
 				if (food) {
 					let multiplier = foodItem.portion || 1;
@@ -104,7 +121,7 @@ export async function createDietPlan(data: {
 				memberId: data.memberId,
 				name: data.name,
 				description: data.description,
-				meals: data.meals,
+				meals: data.meals as unknown as Prisma.InputJsonValue,
 				totalCalories: Math.round(totalCalories) || data.calorieTarget,
 				totalProtein: Math.round(totalProtein) || data.proteinTarget,
 				goal: data.dietType,
@@ -126,7 +143,7 @@ export async function createDietPlan(data: {
 		revalidatePath("/diets");
 		revalidatePath(`/members/${data.memberId}`);
 		return { success: true };
-	} catch (error) {
+	} catch (_error) {
 		return { success: false, error: "Failed to create diet plan" };
 	}
 }
@@ -136,7 +153,7 @@ export async function updateDietPlan(
 	data: {
 		name: string;
 		description?: string;
-		meals: any[];
+		meals: Meal[];
 		calorieTarget?: number;
 		proteinTarget?: number;
 		carbTarget?: number;
@@ -156,7 +173,7 @@ export async function updateDietPlan(
 			data: {
 				name: data.name,
 				description: data.description,
-				meals: data.meals,
+				meals: data.meals as unknown as Prisma.InputJsonValue,
 				totalCalories: data.calorieTarget,
 				totalProtein: data.proteinTarget,
 				goal: data.dietType,
@@ -180,7 +197,7 @@ export async function updateDietPlan(
 		revalidatePath(`/diets/${id}`);
 		revalidatePath(`/members/${plan.memberId}`);
 		return { success: true };
-	} catch (error) {
+	} catch (_error) {
 		return { success: false, error: "Failed to update diet plan" };
 	}
 }
@@ -207,7 +224,7 @@ export async function deleteDietPlan(id: string) {
 		revalidatePath("/diets");
 		revalidatePath(`/members/${plan.memberId}`);
 		return { success: true };
-	} catch (error) {
+	} catch (_error) {
 		return { success: false, error: "Failed to delete diet plan" };
 	}
 }

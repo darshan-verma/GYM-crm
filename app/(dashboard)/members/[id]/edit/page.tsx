@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getMemberById, getTrainers } from "@/lib/actions/members";
-import MemberForm from "@/components/forms/MemberForm";
+import MemberForm, { Member } from "@/components/forms/MemberForm";
 import {
 	Card,
 	CardContent,
@@ -39,7 +39,7 @@ export default async function EditMemberPage({
 				</Button>
 				<h1 className="text-3xl font-bold">Edit Member</h1>
 				<p className="text-muted-foreground mt-1">
-					Update {member.name}'s profile information
+					Update {member.name}&apos;s profile information
 				</p>
 			</div>
 
@@ -48,11 +48,15 @@ export default async function EditMemberPage({
 				<CardHeader>
 					<CardTitle>Member Information</CardTitle>
 					<CardDescription>
-						Update the member's personal and contact details
+						Update the member&apos;s personal and contact details
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<MemberForm trainers={trainers} initialData={member} isEdit />
+					<MemberForm
+						trainers={trainers}
+						initialData={member as unknown as Member}
+						isEdit
+					/>
 				</CardContent>
 			</Card>
 		</div>

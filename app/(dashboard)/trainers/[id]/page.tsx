@@ -10,7 +10,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Mail, Phone, Users, Edit, ArrowLeft } from "lucide-react";
+import { Mail, Phone, Edit, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { formatPhoneNumber, formatDate } from "@/lib/utils/format";
 

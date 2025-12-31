@@ -4,6 +4,20 @@ import { getDietPlan } from "@/lib/actions/diets";
 import prisma from "@/lib/db/prisma";
 import DietEditForm from "@/components/forms/DietEditForm";
 
+interface Meal {
+	mealTime: string;
+	items: Array<{
+		foodName: string;
+		portion: number;
+		unit: string;
+	}>;
+	calories: number;
+	protein: number;
+	carbs: number;
+	fats: number;
+	notes: string;
+}
+
 export default async function EditDietPage({
 	params,
 }: {
@@ -31,6 +45,11 @@ export default async function EditDietPage({
 		notFound();
 	}
 
+	const transformedPlan = {
+		...plan,
+		meals: (plan.meals as unknown as Meal[]) || [],
+	};
+
 	return (
 		<div className="space-y-6">
 			<div>
@@ -40,7 +59,7 @@ export default async function EditDietPage({
 				</p>
 			</div>
 
-			<DietEditForm plan={plan} members={members} />
+			<DietEditForm plan={transformedPlan} members={members} />
 		</div>
 	);
 }

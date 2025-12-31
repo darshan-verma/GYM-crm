@@ -64,7 +64,7 @@ export default function PaymentForm({ members }: PaymentFormProps) {
 			} else {
 				toast.error(result.error || "Failed to record payment");
 			}
-		} catch (error) {
+		} catch (_error) {
 			toast.error("Failed to record payment");
 		} finally {
 			setLoading(false);
@@ -72,7 +72,7 @@ export default function PaymentForm({ members }: PaymentFormProps) {
 	}
 
 	const selectedMemberData = members.find((m) => m.id === selectedMember);
-	const activeMembership = selectedMemberData?.memberships.find(
+	const _activeMembership = selectedMemberData?.memberships.find(
 		(m) => m.active
 	);
 

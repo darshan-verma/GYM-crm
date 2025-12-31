@@ -55,6 +55,8 @@ export default async function MemberDetailPage({
 	const activeMembership = member.memberships.find((m) => m.active);
 	const recentPayments = member.payments.slice(0, 10);
 	const recentAttendance = member.attendance.slice(0, 10);
+	// eslint-disable-next-line react-hooks/purity
+	const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
 	return (
 		<div className="space-y-6">
@@ -100,8 +102,7 @@ export default async function MemberDetailPage({
 
 			{/* Expiry Alert */}
 			{activeMembership &&
-				new Date(activeMembership.endDate) <
-					new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) && (
+				new Date(activeMembership.endDate) < sevenDaysFromNow && (
 					<Card className="border-orange-200 bg-orange-50">
 						<CardContent className="flex items-center gap-3 pt-6">
 							<AlertCircle className="w-5 h-5 text-orange-600" />

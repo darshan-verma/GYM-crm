@@ -16,6 +16,20 @@ import {
 	Edit,
 } from "lucide-react";
 
+interface FoodItem {
+	foodName?: string;
+	name?: string;
+	portion?: number;
+	unit?: string;
+}
+
+interface Meal {
+	mealTime?: string;
+	mealName?: string;
+	items?: FoodItem[];
+	foods?: FoodItem[];
+}
+
 export default async function DietDetailPage({
 	params,
 }: {
@@ -49,7 +63,7 @@ export default async function DietDetailPage({
 		}
 	};
 
-	const calculateMealMacros = (meal: any) => {
+	const calculateMealMacros = (meal: Meal) => {
 		let calories = 0;
 		let protein = 0;
 		let carbs = 0;
@@ -57,7 +71,7 @@ export default async function DietDetailPage({
 
 		// Handle both old format (foods) and new format (items)
 		const foodItems = meal.foods || meal.items || [];
-		foodItems.forEach((foodItem: any) => {
+		foodItems.forEach((foodItem: FoodItem) => {
 			const foodName = foodItem.foodName || foodItem.name;
 			const food = foodDatabase.find((f) => f.name === foodName);
 			if (food) {
@@ -97,7 +111,7 @@ export default async function DietDetailPage({
 	};
 
 	const meals =
-		(plan.meals as any[]).map((meal: any) => ({
+		(plan.meals as Meal[]).map((meal: Meal) => ({
 			mealName: meal.mealTime || meal.mealName,
 			foods: meal.items || meal.foods || [],
 		})) || [];
@@ -232,7 +246,7 @@ export default async function DietDetailPage({
 					</CardHeader>
 					<CardContent className="space-y-6">
 						{meals.length > 0 ? (
-							meals.map((meal: any, index: number) => {
+							meals.map((meal: Meal, index: number) => {
 								const macros = calculateMealMacros(meal);
 								return (
 									<div key={index} className="border rounded-lg p-4 space-y-3">
@@ -265,7 +279,7 @@ export default async function DietDetailPage({
 										</div>
 
 										<div className="space-y-2">
-											{meal.foods?.map((food: any, foodIndex: number) => {
+											{meal.foods?.map((food: FoodItem, foodIndex: number) => {
 												const foodItem = foodDatabase.find(
 													(f) => f.name === food.foodName
 												);

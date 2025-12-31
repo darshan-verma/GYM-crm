@@ -18,9 +18,28 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { LeadSource } from "@prisma/client";
 
+interface Lead {
+	id: string;
+	name: string;
+	email: string;
+	phone: string;
+	source: LeadSource;
+	followUpDate: Date | null;
+	notes: string;
+	status: string;
+	interestedPlan?: string;
+	budget?: number;
+	age?: number;
+	gender?: string;
+	convertedDate?: Date;
+	lastContactDate?: Date;
+	assignedTo?: string;
+	priority?: string;
+}
+
 interface LeadFormProps {
 	isEdit?: boolean;
-	initialData?: any;
+	initialData?: Lead;
 }
 
 export default function LeadForm({
@@ -57,7 +76,7 @@ export default function LeadForm({
 			} else {
 				toast.error(result.error || "Failed to create lead");
 			}
-		} catch (error) {
+		} catch (_error) {
 			toast.error("Failed to create lead");
 		} finally {
 			setLoading(false);

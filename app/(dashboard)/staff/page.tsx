@@ -7,6 +7,15 @@ import Link from "next/link";
 import { Plus, Mail, Phone, Shield, User, Briefcase } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
+interface StaffUser {
+	id: string;
+	name: string;
+	email: string;
+	role: string;
+	phone?: string | null;
+	createdAt: Date;
+}
+
 export default async function StaffPage() {
 	const session = await auth();
 
@@ -100,7 +109,7 @@ export default async function StaffPage() {
 							</tr>
 						</thead>
 						<tbody className="bg-white divide-y divide-gray-200">
-							{users.map((user: any) => (
+							{users.map((user: StaffUser) => (
 								<tr key={user.id} className="hover:bg-gray-50">
 									<td className="px-6 py-4 whitespace-nowrap">
 										<div className="font-medium text-gray-900">{user.name}</div>

@@ -47,7 +47,9 @@ export default async function MembershipPlansPage() {
 			{/* Plans Grid */}
 			<div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
 				{plans.map((plan) => {
-					const features = Array.isArray(plan.features) ? plan.features : [];
+					const features = Array.isArray(plan.features)
+						? (plan.features as string[])
+						: [];
 
 					return (
 						<Card
@@ -90,7 +92,7 @@ export default async function MembershipPlansPage() {
 								{/* Features */}
 								{features.length > 0 && (
 									<div className="space-y-2">
-										{features.map((feature: any, index: number) => (
+										{features.map((feature: string, index: number) => (
 											<div key={index} className="flex items-center gap-2">
 												<Check className="w-4 h-4 text-green-600" />
 												<span className="text-sm">{feature}</span>

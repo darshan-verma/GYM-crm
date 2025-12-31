@@ -39,7 +39,7 @@ export default async function NewMemberPage() {
 				<CardHeader>
 					<CardTitle>Member Information</CardTitle>
 					<CardDescription>
-						Enter the member's personal and contact details
+						Enter the member&apos;s personal and contact details
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
