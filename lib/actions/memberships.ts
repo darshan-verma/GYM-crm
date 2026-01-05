@@ -207,6 +207,93 @@ export async function assignMembership(data: {
 	}
 }
 
+export async function updateMembership(
+	membershipId: string,
+	data: {
+		planId: string;
+		startDate: Date;
+		discount?: number;
+		discountType?: "PERCENTAGE" | "FIXED";
+		notes?: string;
+	}
+) {
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+
+	try {
+		const currentMembership = await prisma.membership.findUnique({
+			where: { id: membershipId },
+			include: { member: true },
+		});
+
+		if (!currentMembership) {
+			return { success: false, error: "Membership not found" };
+		}
+
+		const plan = await prisma.membershipPlan.findUnique({
+			where: { id: data.planId },
+		});
+
+		if (!plan) {
+			return { success: false, error: "Plan not found" };
+		}
+
+		// Calculate end date based on new plan duration
+		const endDate = new Date(data.startDate);
+		endDate.setDate(endDate.getDate() + plan.duration);
+
+		// Calculate final amount
+		let finalAmount = Number(plan.price);
+		if (data.discount) {
+			if (data.discountType === "PERCENTAGE") {
+				finalAmount = finalAmount - (finalAmount * data.discount) / 100;
+			} else {
+				finalAmount = finalAmount - data.discount;
+			}
+		}
+
+		// Update the membership
+		const updatedMembership = await prisma.membership.update({
+			where: { id: membershipId },
+			data: {
+				planId: data.planId,
+				startDate: data.startDate,
+				endDate,
+				amount: plan.price,
+				discount: data.discount,
+				discountType: data.discountType,
+				finalAmount,
+				notes: data.notes,
+			},
+			include: {
+				plan: true,
+				member: true,
+			},
+		});
+
+		// Log activity
+		await prisma.activityLog.create({
+			data: {
+				userId: session.user.id,
+				action: "UPDATE",
+				entity: "Membership",
+				entityId: updatedMembership.id,
+				details: {
+					memberName: updatedMembership.member.name,
+					planName: updatedMembership.plan.name,
+				},
+			},
+		});
+
+		revalidatePath(`/members/${currentMembership.memberId}`);
+		revalidatePath("/members");
+		return { success: true, data: updatedMembership };
+	} catch (error) {
+		console.error("Update membership error:", error);
+		return { success: false, error: "Failed to update membership" };
+	}
+}
+
 export async function renewMembership(membershipId: string) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");

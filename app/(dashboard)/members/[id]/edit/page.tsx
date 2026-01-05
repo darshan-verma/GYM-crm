@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getMemberById, getTrainers } from "@/lib/actions/members";
+import { getMembershipPlans } from "@/lib/actions/memberships";
 import MemberForm, { Member } from "@/components/forms/MemberForm";
 import {
 	Card,
@@ -18,14 +19,22 @@ export default async function EditMemberPage({
 	params: Promise<{ id: string }>;
 }) {
 	const { id } = await params;
-	const [member, trainers] = await Promise.all([
+	const [member, trainers, membershipPlans] = await Promise.all([
 		getMemberById(id),
 		getTrainers(),
+		getMembershipPlans(),
 	]);
 
 	if (!member) {
 		notFound();
 	}
+
+	// Get active membership plan ID
+	const activeMembership = member.memberships.find((m) => m.active);
+	const memberWithPlanId = {
+		...member,
+		membershipPlanId: activeMembership?.planId || undefined,
+	};
 
 	return (
 		<div className="space-y-6 max-w-4xl">
@@ -54,7 +63,8 @@ export default async function EditMemberPage({
 				<CardContent>
 					<MemberForm
 						trainers={trainers}
-						initialData={member as unknown as Member}
+						membershipPlans={membershipPlans}
+						initialData={memberWithPlanId as unknown as Member}
 						isEdit
 					/>
 				</CardContent>

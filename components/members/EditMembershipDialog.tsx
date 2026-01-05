@@ -20,37 +20,57 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2 } from "lucide-react";
+import { Loader2, Info } from "lucide-react";
 import { toast } from "sonner";
-import { assignMembership } from "@/lib/actions/memberships";
+import { updateMembership } from "@/lib/actions/memberships";
 import { getMembershipPlans } from "@/lib/actions/memberships";
 import { formatCurrency } from "@/lib/utils/format";
+import { Badge } from "@/components/ui/badge";
 
-interface AssignMembershipDialogProps {
-	memberId: string;
+interface EditMembershipDialogProps {
+	membership: {
+		id: string;
+		memberId: string;
+		planId: string;
+		startDate: Date | string;
+		endDate: Date | string;
+		amount: number;
+		discount?: number;
+		discountType?: string;
+		finalAmount: number;
+		notes?: string;
+		plan: {
+			id: string;
+			name: string;
+			price: number;
+			duration: number;
+		};
+	};
 	open: boolean;
 	onClose: () => void;
 }
 
-export default function AssignMembershipDialog({
-	memberId,
+export default function EditMembershipDialog({
+	membership,
 	open,
 	onClose,
-}: AssignMembershipDialogProps) {
+}: EditMembershipDialogProps) {
 	const router = useRouter();
 	const [loading, setLoading] = useState(false);
 	const [plans, setPlans] = useState<
 		{ id: string; name: string; price: number; duration: number }[]
 	>([]);
-	const [selectedPlan, setSelectedPlan] = useState<string>("");
+	const [selectedPlan, setSelectedPlan] = useState<string>(membership.planId);
 	const [startDate, setStartDate] = useState(
-		new Date().toISOString().split("T")[0]
+		new Date(membership.startDate).toISOString().split("T")[0]
 	);
-	const [discount, setDiscount] = useState("");
+	const [discount, setDiscount] = useState(
+		membership.discount?.toString() || ""
+	);
 	const [discountType, setDiscountType] = useState<"PERCENTAGE" | "FIXED">(
-		"FIXED"
+		(membership.discountType as "PERCENTAGE" | "FIXED") || "FIXED"
 	);
-	const [notes, setNotes] = useState("");
+	const [notes, setNotes] = useState(membership.notes || "");
 
 	useEffect(() => {
 		if (open) {
@@ -59,6 +79,7 @@ export default function AssignMembershipDialog({
 	}, [open]);
 
 	const selectedPlanData = plans.find((p) => p.id === selectedPlan);
+	const currentPlan = membership.plan;
 
 	let finalAmount = selectedPlanData ? Number(selectedPlanData.price) : 0;
 	if (discount && selectedPlanData) {
@@ -80,8 +101,7 @@ export default function AssignMembershipDialog({
 		setLoading(true);
 
 		try {
-			const result = await assignMembership({
-				memberId,
+			const result = await updateMembership(membership.id, {
 				planId: selectedPlan,
 				startDate: new Date(startDate),
 				discount: discount ? parseFloat(discount) : undefined,
@@ -90,11 +110,11 @@ export default function AssignMembershipDialog({
 			});
 
 			if (result.success) {
-				toast.success("Membership assigned successfully");
+				toast.success("Membership updated successfully");
 				onClose();
 				router.refresh();
 			} else {
-				toast.error(result.error || "Failed to assign membership");
+				toast.error(result.error || "Failed to update membership");
 			}
 		} catch (_error) {
 			toast.error("Something went wrong");
@@ -107,16 +127,35 @@ export default function AssignMembershipDialog({
 		<Dialog open={open} onOpenChange={onClose}>
 			<DialogContent className="max-w-md">
 				<DialogHeader>
-					<DialogTitle>Assign Membership</DialogTitle>
+					<DialogTitle>Edit Membership</DialogTitle>
 					<DialogDescription>
-						Select a membership plan and configure the details
+						Update the membership plan and other details
 					</DialogDescription>
 				</DialogHeader>
 
 				<form onSubmit={handleSubmit} className="space-y-4">
+					{/* Current Plan Info */}
+					<div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+						<div className="flex items-center gap-2">
+							<Info className="w-4 h-4 text-blue-600" />
+							<span className="text-sm font-medium text-blue-900">
+								Current Plan
+							</span>
+						</div>
+						<div className="flex items-center justify-between">
+							<span className="text-sm text-blue-700">{currentPlan.name}</span>
+							<Badge variant="outline" className="bg-white">
+								{formatCurrency(Number(currentPlan.price))}
+							</Badge>
+						</div>
+						<p className="text-xs text-blue-600">
+							{currentPlan.duration} days duration
+						</p>
+					</div>
+
 					{/* Plan Selection */}
 					<div className="space-y-2">
-						<Label>Membership Plan *</Label>
+						<Label>Select New Plan *</Label>
 						<Select
 							value={selectedPlan}
 							onValueChange={setSelectedPlan}
@@ -130,6 +169,7 @@ export default function AssignMembershipDialog({
 									<SelectItem key={plan.id} value={plan.id}>
 										{plan.name} - {formatCurrency(Number(plan.price))} (
 										{plan.duration} days)
+										{plan.id === currentPlan.id && " (Current)"}
 									</SelectItem>
 								))}
 							</SelectContent>
@@ -236,10 +276,10 @@ export default function AssignMembershipDialog({
 							{loading ? (
 								<>
 									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-									Assigning...
+									Updating...
 								</>
 							) : (
-								"Assign Membership"
+								"Update Membership"
 							)}
 						</Button>
 					</div>

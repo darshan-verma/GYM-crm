@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { writeFile, mkdir } from "fs/promises";
+import path from "path";
 import prisma from "@/lib/db/prisma";
 import { auth } from "@/lib/auth";
 import { MembershipStatus } from "@prisma/client";
@@ -31,6 +33,23 @@ export async function createMember(formData: FormData) {
 		const membershipPlanId =
 			(formData.get("membershipPlanId") as string) || null;
 
+		// Handle photo upload
+		let photoPath = null;
+		const photo = formData.get("photo") as File;
+		if (photo && photo.size > 0) {
+			const bytes = await photo.arrayBuffer();
+			const buffer = Buffer.from(bytes);
+
+			// Create upload directory if it doesn't exist
+			const uploadDir = path.join(process.cwd(), "public/uploads/members");
+			await mkdir(uploadDir, { recursive: true });
+
+			const filename = `${Date.now()}-${photo.name.replace(/\s/g, "-")}`;
+			const filepath = path.join(uploadDir, filename);
+			await writeFile(filepath, buffer);
+			photoPath = `/uploads/members/${filename}`;
+		}
+
 		// Generate membership number
 		const lastMember = await prisma.member.findFirst({
 			orderBy: { createdAt: "desc" },
@@ -47,6 +66,7 @@ export async function createMember(formData: FormData) {
 			data: {
 				...data,
 				membershipNumber,
+				photo: photoPath,
 				dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
 				status: membershipPlanId ? "ACTIVE" : "PENDING",
 			},
@@ -135,7 +155,14 @@ export async function getMembers(params?: {
 	const [members, total] = await Promise.all([
 		prisma.member.findMany({
 			where,
-			include: {
+			select: {
+				id: true,
+				name: true,
+				membershipNumber: true,
+				phone: true,
+				email: true,
+				photo: true,
+				status: true,
 				trainer: { select: { id: true, name: true } },
 				memberships: {
 					where: { active: true },
@@ -199,7 +226,7 @@ export async function updateMember(id: string, formData: FormData) {
 	if (!session) throw new Error("Unauthorized");
 
 	try {
-		const data = {
+		let data: any = {
 			name: formData.get("name") as string,
 			email: (formData.get("email") as string) || null,
 			phone: formData.get("phone") as string,
@@ -209,6 +236,75 @@ export async function updateMember(id: string, formData: FormData) {
 			trainerId: (formData.get("trainerId") as string) || null,
 			notes: (formData.get("notes") as string) || null,
 		};
+
+		const membershipPlanId =
+			(formData.get("membershipPlanId") as string) || null;
+
+		// Handle photo upload
+		const photo = formData.get("photo") as File;
+		if (photo && photo.size > 0) {
+			const bytes = await photo.arrayBuffer();
+			const buffer = Buffer.from(bytes);
+
+			// Create upload directory if it doesn't exist
+			const uploadDir = path.join(process.cwd(), "public/uploads/members");
+			await mkdir(uploadDir, { recursive: true });
+
+			const filename = `${Date.now()}-${photo.name.replace(/\s/g, "-")}`;
+			const filepath = path.join(uploadDir, filename);
+			await writeFile(filepath, buffer);
+			data.photo = `/uploads/members/${filename}`;
+		}
+
+		// Get current active membership
+		const currentMembership = await prisma.membership.findFirst({
+			where: { memberId: id, active: true },
+		});
+
+		// Handle membership plan changes
+		if (membershipPlanId && membershipPlanId !== currentMembership?.planId) {
+			// Plan changed or new plan selected
+			const membershipPlan = await prisma.membershipPlan.findUnique({
+				where: { id: membershipPlanId },
+			});
+
+			if (membershipPlan) {
+				// Deactivate current membership if exists
+				if (currentMembership) {
+					await prisma.membership.update({
+						where: { id: currentMembership.id },
+						data: { active: false },
+					});
+				}
+
+				// Create new membership
+				const startDate = new Date();
+				const endDate = new Date(startDate);
+				endDate.setDate(startDate.getDate() + membershipPlan.duration);
+
+				await prisma.membership.create({
+					data: {
+						memberId: id,
+						planId: membershipPlanId,
+						startDate,
+						endDate,
+						amount: membershipPlan.price,
+						finalAmount: membershipPlan.price,
+						active: true,
+						autoRenew: false,
+					},
+				});
+
+				data.status = "ACTIVE";
+			}
+		} else if (!membershipPlanId && currentMembership) {
+			// Plan removed
+			await prisma.membership.update({
+				where: { id: currentMembership.id },
+				data: { active: false },
+			});
+			data.status = "PENDING";
+		}
 
 		const member = await prisma.member.update({
 			where: { id },
@@ -226,6 +322,7 @@ export async function updateMember(id: string, formData: FormData) {
 		});
 
 		revalidatePath(`/members/${id}`);
+		revalidatePath(`/members/${id}/edit`);
 		revalidatePath("/members");
 		return { success: true, data: member };
 	} catch (_error) {

@@ -32,6 +32,7 @@ import {
 	formatPhoneNumber,
 	formatDuration,
 } from "@/lib/utils/format";
+import MembershipEditButton from "@/components/members/MembershipEditButton";
 
 const statusColors = {
 	ACTIVE: "bg-green-100 text-green-800 border-green-200",
@@ -234,10 +235,36 @@ export default async function MemberDetailPage({
 					{activeMembership && (
 						<Card>
 							<CardHeader>
-								<CardTitle>Active Membership</CardTitle>
-								<CardDescription>
-									Current membership plan details
-								</CardDescription>
+								<div className="flex items-center justify-between">
+									<div>
+										<CardTitle>Active Membership</CardTitle>
+										<CardDescription>
+											Current membership plan details
+										</CardDescription>
+									</div>
+									<MembershipEditButton
+										membership={{
+											id: activeMembership.id,
+											memberId: activeMembership.memberId,
+											planId: activeMembership.planId,
+											startDate: activeMembership.startDate,
+											endDate: activeMembership.endDate,
+											amount: Number(activeMembership.amount),
+											discount: activeMembership.discount
+												? Number(activeMembership.discount)
+												: undefined,
+											discountType: activeMembership.discountType || undefined,
+											finalAmount: Number(activeMembership.finalAmount),
+											notes: activeMembership.notes || undefined,
+											plan: {
+												id: activeMembership.plan.id,
+												name: activeMembership.plan.name,
+												price: Number(activeMembership.plan.price),
+												duration: activeMembership.plan.duration,
+											},
+										}}
+									/>
+								</div>
 							</CardHeader>
 							<CardContent>
 								<div className="grid gap-4 md:grid-cols-2">

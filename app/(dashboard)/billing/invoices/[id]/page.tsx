@@ -4,8 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 import {
 	ArrowLeft,
-	Download,
-	Printer,
 	Mail,
 	Phone,
 	MapPin,
@@ -14,6 +12,7 @@ import {
 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { formatCurrency } from "@/lib/utils/format";
+import { InvoiceActions } from "@/components/invoices/InvoiceActions";
 
 interface PaymentWithMember {
 	id: string;
@@ -61,12 +60,6 @@ export default async function InvoiceDetailPage({
 		notFound();
 	}
 
-	const handlePrint = () => {
-		if (typeof window !== "undefined") {
-			window.print();
-		}
-	};
-
 	return (
 		<div className="space-y-6">
 			<div className="flex justify-between items-start print:hidden">
@@ -86,18 +79,7 @@ export default async function InvoiceDetailPage({
 						{new Date(payment.paymentDate).toLocaleDateString()}
 					</p>
 				</div>
-				<div className="flex gap-2">
-					<Button variant="outline" onClick={handlePrint}>
-						<Printer className="h-4 w-4 mr-2" />
-						Print
-					</Button>
-					<Link href={`/api/invoices/${payment.id}/download`} target="_blank">
-						<Button>
-							<Download className="h-4 w-4 mr-2" />
-							Download PDF
-						</Button>
-					</Link>
-				</div>
+				<InvoiceActions invoiceId={payment.id} />
 			</div>
 
 			{/* Invoice Document */}

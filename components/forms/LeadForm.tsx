@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createLead } from "@/lib/actions/leads";
+import { createLead, updateLead } from "@/lib/actions/leads";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,20 +21,20 @@ import { LeadSource } from "@prisma/client";
 interface Lead {
 	id: string;
 	name: string;
-	email: string;
+	email: string | null;
 	phone: string;
 	source: LeadSource;
 	followUpDate: Date | null;
-	notes: string;
+	notes: string | null;
 	status: string;
-	interestedPlan?: string;
-	budget?: number;
-	age?: number;
-	gender?: string;
-	convertedDate?: Date;
-	lastContactDate?: Date;
-	assignedTo?: string;
-	priority?: string;
+	interestedPlan?: string | null;
+	budget?: number | null;
+	age?: number | null;
+	gender?: string | null;
+	convertedDate?: Date | null;
+	lastContactDate?: Date | null;
+	assignedTo?: string | null;
+	priority?: string | null;
 }
 
 interface LeadFormProps {
@@ -67,17 +67,24 @@ export default function LeadForm({
 		};
 
 		try {
-			const result = await createLead(data);
+			const result =
+				isEdit && initialData
+					? await updateLead(initialData.id, data)
+					: await createLead(data);
 
 			if (result.success) {
-				toast.success("Lead created successfully");
-				router.push("/leads");
+				toast.success(
+					isEdit ? "Lead updated successfully" : "Lead created successfully"
+				);
+				router.push(
+					isEdit && initialData ? `/leads/${initialData.id}` : "/leads"
+				);
 				router.refresh();
 			} else {
-				toast.error(result.error || "Failed to create lead");
+				toast.error(result.error || "Failed to save lead");
 			}
 		} catch (_error) {
-			toast.error("Failed to create lead");
+			toast.error("Failed to save lead");
 		} finally {
 			setLoading(false);
 		}
@@ -120,7 +127,7 @@ export default function LeadForm({
 						name="email"
 						type="email"
 						placeholder="Enter email address"
-						defaultValue={initialData?.email}
+						defaultValue={initialData?.email || undefined}
 						disabled={loading}
 					/>
 				</div>
@@ -155,7 +162,7 @@ export default function LeadForm({
 						id="interestedPlan"
 						name="interestedPlan"
 						placeholder="e.g., 3 Month Plan, Personal Training"
-						defaultValue={initialData?.interestedPlan}
+						defaultValue={initialData?.interestedPlan || undefined}
 						disabled={loading}
 					/>
 				</div>
@@ -184,7 +191,7 @@ export default function LeadForm({
 					id="notes"
 					name="notes"
 					placeholder="Additional notes about the lead"
-					defaultValue={initialData?.notes}
+					defaultValue={initialData?.notes || undefined}
 					disabled={loading}
 					rows={3}
 				/>
