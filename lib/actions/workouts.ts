@@ -31,6 +31,12 @@ export async function getWorkoutPlans(memberId?: string) {
 					membershipNumber: true,
 				},
 			},
+			goal: {
+				select: {
+					id: true,
+					name: true,
+				},
+			},
 		},
 		orderBy: { createdAt: "desc" },
 	});
@@ -49,6 +55,12 @@ export async function getWorkoutPlan(id: string) {
 					phone: true,
 				},
 			},
+			goal: {
+				select: {
+					id: true,
+					name: true,
+				},
+			},
 		},
 	});
 }
@@ -59,7 +71,7 @@ export async function createWorkoutPlan(data: {
 	description?: string;
 	exercises: Exercise[];
 	difficulty?: string;
-	goal?: string;
+	goalId?: string;
 	startDate?: Date;
 	endDate?: Date;
 }) {
@@ -109,12 +121,26 @@ export async function updateWorkoutPlan(
 	if (!session) throw new Error("Unauthorized");
 
 	try {
+		const updateData: Record<string, unknown> = {
+			name: data.name,
+			description: data.description,
+			exercises: data.exercises as unknown as Prisma.InputJsonValue,
+			difficulty: data.difficulty,
+			startDate: data.startDate,
+			endDate: data.endDate,
+			active: data.active,
+		};
+
+		// Handle goal relation separately
+		if (data.goal) {
+			updateData.goal = {
+				connect: { id: data.goal },
+			};
+		}
+
 		const plan = await prisma.workoutPlan.update({
 			where: { id },
-			data: {
-				...data,
-				exercises: data.exercises as unknown as Prisma.InputJsonValue,
-			},
+			data: updateData,
 		});
 
 		await prisma.activityLog.create({

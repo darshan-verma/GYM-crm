@@ -4,10 +4,14 @@ import prisma from "@/lib/db/prisma";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
+import { Permission } from "@prisma/client";
 
 export async function getUsers() {
 	const session = await auth();
-	if (!session || session.user.role !== "ADMIN") {
+	if (
+		!session ||
+		(session.user.role !== "ADMIN" && session.user.role !== "SUPER_ADMIN")
+	) {
 		throw new Error("Unauthorized");
 	}
 
@@ -18,6 +22,7 @@ export async function getUsers() {
 			name: true,
 			email: true,
 			role: true,
+			permissions: true,
 			phone: true,
 			createdAt: true,
 		},
@@ -26,7 +31,10 @@ export async function getUsers() {
 
 export async function getUser(id: string) {
 	const session = await auth();
-	if (!session || session.user.role !== "ADMIN") {
+	if (
+		!session ||
+		(session.user.role !== "ADMIN" && session.user.role !== "SUPER_ADMIN")
+	) {
 		throw new Error("Unauthorized");
 	}
 
@@ -37,6 +45,7 @@ export async function getUser(id: string) {
 			name: true,
 			email: true,
 			role: true,
+			permissions: true,
 			phone: true,
 			createdAt: true,
 		},
@@ -47,12 +56,29 @@ export async function createUser(data: {
 	name: string;
 	email: string;
 	password: string;
-	role: "ADMIN" | "TRAINER" | "RECEPTIONIST";
+	role: "SUPER_ADMIN" | "ADMIN" | "TRAINER" | "RECEPTIONIST" | "HELPER";
+	permissions?: Permission[];
 	phone?: string;
 }) {
 	const session = await auth();
-	if (!session || session.user.role !== "ADMIN") {
+	if (!session) {
 		throw new Error("Unauthorized");
+	}
+
+	// Only super admins can create admin or super admin accounts
+	if (
+		(data.role === "ADMIN" || data.role === "SUPER_ADMIN") &&
+		session.user.role !== "SUPER_ADMIN"
+	) {
+		throw new Error("Unauthorized to create admin accounts");
+	}
+
+	// Regular admins can only create trainer and receptionist accounts
+	if (
+		session.user.role === "ADMIN" &&
+		(data.role === "SUPER_ADMIN" || data.role === "ADMIN")
+	) {
+		throw new Error("Unauthorized to create admin accounts");
 	}
 
 	try {
@@ -70,8 +96,12 @@ export async function createUser(data: {
 
 		const user = await prisma.user.create({
 			data: {
-				...data,
+				name: data.name,
+				email: data.email,
 				password: hashedPassword,
+				role: data.role,
+				phone: data.phone,
+				permissions: data.permissions || [],
 			},
 		});
 
@@ -98,14 +128,34 @@ export async function updateUser(
 	data: {
 		name: string;
 		email: string;
-		role: "ADMIN" | "TRAINER" | "RECEPTIONIST";
+		role: "SUPER_ADMIN" | "ADMIN" | "TRAINER" | "RECEPTIONIST" | "HELPER";
+		permissions?: Permission[];
 		phone?: string;
 		password?: string;
 	}
 ) {
 	const session = await auth();
-	if (!session || session.user.role !== "ADMIN") {
+	if (
+		!session ||
+		(session.user.role !== "ADMIN" && session.user.role !== "SUPER_ADMIN")
+	) {
 		throw new Error("Unauthorized");
+	}
+
+	// Only super admins can change roles to admin or super admin
+	if (
+		(data.role === "ADMIN" || data.role === "SUPER_ADMIN") &&
+		session.user.role !== "SUPER_ADMIN"
+	) {
+		throw new Error("Unauthorized to assign admin roles");
+	}
+
+	// Regular admins cannot change roles to admin or super admin
+	if (
+		session.user.role === "ADMIN" &&
+		(data.role === "ADMIN" || data.role === "SUPER_ADMIN")
+	) {
+		throw new Error("Unauthorized to assign admin roles");
 	}
 
 	try {
@@ -125,6 +175,7 @@ export async function updateUser(
 			email: data.email,
 			role: data.role,
 			phone: data.phone,
+			permissions: data.permissions,
 		};
 
 		// Only update password if provided
@@ -158,13 +209,33 @@ export async function updateUser(
 
 export async function deleteUser(id: string) {
 	const session = await auth();
-	if (!session || session.user.role !== "ADMIN") {
+	if (
+		!session ||
+		(session.user.role !== "ADMIN" && session.user.role !== "SUPER_ADMIN")
+	) {
 		throw new Error("Unauthorized");
 	}
 
 	// Prevent deleting yourself
 	if (session.user.id === id) {
 		return { success: false, error: "Cannot delete your own account" };
+	}
+
+	// Get the user being deleted to check their role
+	const userToDelete = await prisma.user.findUnique({
+		where: { id },
+	});
+
+	if (!userToDelete) {
+		return { success: false, error: "User not found" };
+	}
+
+	// Regular admins cannot delete admin or super admin accounts
+	if (
+		session.user.role === "ADMIN" &&
+		(userToDelete.role === "ADMIN" || userToDelete.role === "SUPER_ADMIN")
+	) {
+		throw new Error("Unauthorized to delete admin accounts");
 	}
 
 	try {

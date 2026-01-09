@@ -148,10 +148,10 @@ export function MembershipPlanForm() {
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label>Features *</Label>
+          <Label>Services *</Label>
           <Button type="button" variant="outline" size="sm" onClick={addFeature}>
             <Plus className="h-4 w-4 mr-1" />
-            Add Feature
+            Add Service
           </Button>
         </div>
         <div className="space-y-2">

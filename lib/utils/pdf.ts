@@ -16,6 +16,9 @@ interface InvoiceData {
 	endDate?: Date;
 	discount?: number;
 	notes?: string;
+	gstNumber?: string;
+	gstPercentage?: number;
+	gstAmount?: number;
 }
 
 export function generateInvoicePDF(data: InvoiceData) {
@@ -97,6 +100,14 @@ export function generateInvoicePDF(data: InvoiceData) {
 		paymentDetails.push(["Transaction ID", data.transactionId]);
 	}
 
+	if (data.gstNumber) {
+		paymentDetails.push(["GST Number", data.gstNumber]);
+	}
+
+	if (data.gstPercentage) {
+		paymentDetails.push(["GST Percentage", `${data.gstPercentage}%`]);
+	}
+
 	autoTable(doc, {
 		startY: tableStartY,
 		head: [["Description", "Details"]],
@@ -130,7 +141,12 @@ export function generateInvoicePDF(data: InvoiceData) {
 		amountDetails.push(["Membership Amount", `₹${baseAmount.toFixed(2)}`]);
 		amountDetails.push(["Discount", `-₹${data.discount.toFixed(2)}`]);
 	}
-
+	// Add GST breakdown if GST is applied
+	if (data.gstAmount && data.gstAmount > 0) {
+		const subtotal = data.amount - data.gstAmount;
+		amountDetails.push(["Subtotal", `₹${subtotal.toFixed(2)}`]);
+		amountDetails.push(["GST Amount", `₹${data.gstAmount.toFixed(2)}`]);
+	}
 	amountDetails.push(["Total Amount Paid", `₹${data.amount.toFixed(2)}`]);
 
 	autoTable(doc, {
@@ -275,6 +291,14 @@ export function generateInvoicePDFBlob(data: InvoiceData): Blob {
 		paymentDetails.push(["Transaction ID", data.transactionId]);
 	}
 
+	if (data.gstNumber) {
+		paymentDetails.push(["GST Number", data.gstNumber]);
+	}
+
+	if (data.gstPercentage) {
+		paymentDetails.push(["GST Percentage", `${data.gstPercentage}%`]);
+	}
+
 	autoTable(doc, {
 		startY: tableStartY,
 		head: [["Description", "Details"]],
@@ -306,7 +330,12 @@ export function generateInvoicePDFBlob(data: InvoiceData): Blob {
 		amountDetails.push(["Membership Amount", `₹${baseAmount.toFixed(2)}`]);
 		amountDetails.push(["Discount", `-₹${data.discount.toFixed(2)}`]);
 	}
-
+	// Add GST breakdown if GST is applied
+	if (data.gstAmount && data.gstAmount > 0) {
+		const subtotal = data.amount - data.gstAmount;
+		amountDetails.push(["Subtotal", `₹${subtotal.toFixed(2)}`]);
+		amountDetails.push(["GST Amount", `₹${data.gstAmount.toFixed(2)}`]);
+	}
 	amountDetails.push(["Total Amount Paid", `₹${data.amount.toFixed(2)}`]);
 
 	autoTable(doc, {

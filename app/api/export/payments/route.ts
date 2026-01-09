@@ -61,6 +61,11 @@ export async function GET(request: NextRequest) {
 			"Payment Date": new Date(payment.paymentDate).toLocaleDateString("en-IN"),
 			"Transaction ID": payment.transactionId || "N/A",
 			"Reference No.": payment.referenceNumber || "N/A",
+			"GST Number": payment.gstNumber || "N/A",
+			"GST Percentage": payment.gstPercentage
+				? `${Number(payment.gstPercentage)}%`
+				: "N/A",
+			"GST Amount (₹)": payment.gstAmount ? Number(payment.gstAmount) : "N/A",
 			Notes: payment.notes || "N/A",
 		}));
 
@@ -79,6 +84,9 @@ export async function GET(request: NextRequest) {
 			{ wch: 15 }, // Payment Date
 			{ wch: 20 }, // Transaction ID
 			{ wch: 20 }, // Reference No.
+			{ wch: 20 }, // GST Number
+			{ wch: 15 }, // GST Percentage
+			{ wch: 15 }, // GST Amount
 			{ wch: 30 }, // Notes
 		];
 

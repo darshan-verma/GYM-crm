@@ -48,6 +48,7 @@ export default async function EditDietPage({
 	const transformedPlan = {
 		...plan,
 		meals: (plan.meals as unknown as Meal[]) || [],
+		goal: plan.goal,
 	};
 
 	return (

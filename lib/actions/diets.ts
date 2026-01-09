@@ -69,7 +69,7 @@ export async function createDietPlan(data: {
 	proteinTarget?: number;
 	carbTarget?: number;
 	fatTarget?: number;
-	dietType?: string;
+	dietTypeId?: string;
 	startDate?: Date;
 	endDate?: Date;
 }) {
@@ -81,14 +81,14 @@ export async function createDietPlan(data: {
 		let totalCalories = 0;
 		let totalProtein = 0;
 
-		// Import food database for calculations
-		const { foodDatabase } = await import("@/lib/data/food-database");
+		// Get foods from database for calculations
+		const foods = await prisma.food.findMany();
 
 		data.meals.forEach((meal: Meal) => {
 			const foodItems = meal.items;
 			foodItems.forEach((foodItem: FoodItem) => {
 				const foodName = foodItem.foodName;
-				const food = foodDatabase.find((f) => f.name === foodName);
+				const food = foods.find((f) => f.name === foodName);
 				if (food) {
 					let multiplier = foodItem.portion || 1;
 
@@ -111,7 +111,7 @@ export async function createDietPlan(data: {
 					}
 
 					totalCalories += food.calories * multiplier;
-					totalProtein += food.protein * multiplier;
+					totalProtein += Number(food.protein) * multiplier;
 				}
 			});
 		});
@@ -124,7 +124,7 @@ export async function createDietPlan(data: {
 				meals: data.meals as unknown as Prisma.InputJsonValue,
 				totalCalories: Math.round(totalCalories) || data.calorieTarget,
 				totalProtein: Math.round(totalProtein) || data.proteinTarget,
-				goal: data.dietType,
+				dietTypeId: data.dietTypeId,
 				startDate: data.startDate,
 				endDate: data.endDate,
 			},

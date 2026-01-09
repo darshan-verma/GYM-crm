@@ -226,7 +226,7 @@ export async function updateMember(id: string, formData: FormData) {
 	if (!session) throw new Error("Unauthorized");
 
 	try {
-		let data: any = {
+		let data: Record<string, unknown> = {
 			name: formData.get("name") as string,
 			email: (formData.get("email") as string) || null,
 			phone: formData.get("phone") as string,

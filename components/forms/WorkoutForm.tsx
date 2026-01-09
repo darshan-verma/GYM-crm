@@ -14,24 +14,104 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
+import { useEffect } from "react";
 import { createWorkoutPlan } from "@/lib/actions/workouts";
+import {
+	createFitnessGoal,
+	getFitnessGoals,
+	seedDefaultFitnessGoals,
+} from "@/lib/actions/fitness-goals";
 import { exerciseLibrary } from "@/lib/data/exercise-library";
+import {
+	createExercise,
+	getExercises,
+	seedDefaultExercises,
+} from "@/lib/actions/exercises";
+import { toast } from "sonner";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+	DialogTrigger,
+} from "@/components/ui/dialog";
 
 interface WorkoutFormProps {
 	members: Array<{ id: string; name: string; membershipNumber: string }>;
+	fitnessGoals: Array<{
+		id: string;
+		name: string;
+		description?: string;
+		isDefault: boolean;
+	}>;
+	exercises: Array<{
+		id: string;
+		name: string;
+		category: string;
+		equipment: string;
+		difficulty: string;
+		isDefault: boolean;
+	}>;
 }
 
-export function WorkoutForm({ members }: WorkoutFormProps) {
+export function WorkoutForm({
+	members,
+	fitnessGoals: initialFitnessGoals,
+	exercises: initialExercises,
+}: WorkoutFormProps) {
 	const router = useRouter();
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
+	const [fitnessGoals, setFitnessGoals] = useState(initialFitnessGoals);
+	const [showAddGoal, setShowAddGoal] = useState(false);
+	const [newGoalName, setNewGoalName] = useState("");
+	const [exercisesList, setExercisesList] = useState(initialExercises);
+	const [newExercise, setNewExercise] = useState({
+		name: "",
+		category: "Chest",
+		equipment: "Bodyweight",
+		difficulty: "BEGINNER",
+	});
+
+	useEffect(() => {
+		// Seed default fitness goals if none exist
+		if (fitnessGoals.length === 0) {
+			seedDefaultFitnessGoals()
+				.then(() => {
+					// Refresh the fitness goals
+					getFitnessGoals().then((goals) => {
+						setFitnessGoals(
+							goals.map((goal) => ({
+								...goal,
+								description: goal.description || undefined,
+							}))
+						);
+					});
+				})
+				.catch(console.error);
+		}
+	}, [fitnessGoals.length]);
+
+	useEffect(() => {
+		// Seed default exercises if none exist
+		if (exercisesList.length === 0) {
+			seedDefaultExercises()
+				.then(() => {
+					// Refresh the exercises
+					getExercises().then(setExercisesList);
+				})
+				.catch(console.error);
+		}
+	}, [exercisesList.length]);
 
 	const [formData, setFormData] = useState({
 		memberId: "",
 		name: "",
 		description: "",
 		difficulty: "BEGINNER",
-		goal: "WEIGHT_LOSS",
+		goalId: "",
 		startDate: new Date().toISOString().split("T")[0],
 		endDate: "",
 	});
@@ -68,10 +148,78 @@ export function WorkoutForm({ members }: WorkoutFormProps) {
 		"Cardio",
 	];
 
+	const handleAddFitnessGoal = async () => {
+		if (!newGoalName.trim()) return;
+
+		try {
+			const result = await createFitnessGoal({
+				name: newGoalName.trim(),
+			});
+
+			setFitnessGoals((prev) => [
+				...prev,
+				{
+					...result,
+					description: result.description || undefined,
+				},
+			]);
+			setFormData((prev) => ({ ...prev, goalId: result.id })); // Auto-select the new goal
+			setNewGoalName("");
+			setShowAddGoal(false);
+			toast.success("Fitness goal added successfully");
+		} catch (error) {
+			toast.error(
+				error instanceof Error ? error.message : "Failed to add fitness goal"
+			);
+		}
+	};
+
+	const handleAddExercise = async () => {
+		if (!newExercise.name.trim()) {
+			toast.error("Please enter an exercise name");
+			return;
+		}
+
+		try {
+			const result = await createExercise({
+				name: newExercise.name.trim(),
+				category: newExercise.category,
+				equipment: newExercise.equipment,
+				difficulty: newExercise.difficulty,
+			});
+
+			setExercisesList((prev) => [...prev, result]);
+			setNewExercise({
+				name: "",
+				category: "Chest",
+				equipment: "Bodyweight",
+				difficulty: "BEGINNER",
+			});
+			toast.success("Exercise added successfully");
+		} catch (error) {
+			toast.error(
+				error instanceof Error ? error.message : "Failed to add exercise"
+			);
+		}
+	};
+
+	// Combine database exercises with static library (for backward compatibility)
+	const allExercises = [
+		...exercisesList.map((ex) => ({
+			name: ex.name,
+			category: ex.category,
+			equipment: ex.equipment,
+			difficulty: ex.difficulty,
+		})),
+		...exerciseLibrary.filter(
+			(ex) => !exercisesList.some((dbEx) => dbEx.name === ex.name)
+		),
+	];
+
 	const filteredExercises =
 		selectedCategory === "All"
-			? exerciseLibrary
-			: exerciseLibrary.filter((ex) => ex.category === selectedCategory);
+			? allExercises
+			: allExercises.filter((ex) => ex.category === selectedCategory);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -211,21 +359,69 @@ export function WorkoutForm({ members }: WorkoutFormProps) {
 
 				<div className="space-y-2">
 					<Label htmlFor="goal">Fitness Goal</Label>
-					<Select
-						value={formData.goal}
-						onValueChange={(value) =>
-							setFormData((prev) => ({ ...prev, goal: value }))
-						}
-					>
-						<SelectTrigger>
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value="WEIGHT_LOSS">Weight Loss</SelectItem>
-							<SelectItem value="MUSCLE_GAIN">Muscle Gain</SelectItem>
-							<SelectItem value="ENDURANCE">Endurance</SelectItem>
-						</SelectContent>
-					</Select>
+					<div className="flex gap-2">
+						<Select
+							value={formData.goalId}
+							onValueChange={(value) =>
+								setFormData((prev) => ({ ...prev, goalId: value }))
+							}
+						>
+							<SelectTrigger className="w-64">
+								<SelectValue placeholder="Select a fitness goal" />
+							</SelectTrigger>
+							<SelectContent>
+								{fitnessGoals.map((goal) => (
+									<SelectItem key={goal.id} value={goal.id}>
+										{goal.name}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							onClick={() => setShowAddGoal(!showAddGoal)}
+						>
+							<Plus className="h-4 w-4 mr-1" />
+							Add Goal
+						</Button>
+					</div>
+
+					{showAddGoal && (
+						<div className="space-y-2 p-3 border rounded-lg bg-gray-50">
+							<div>
+								<Label htmlFor="newGoalName">Goal Name *</Label>
+								<Input
+									id="newGoalName"
+									value={newGoalName}
+									onChange={(e) => setNewGoalName(e.target.value)}
+									placeholder="Enter goal name"
+								/>
+							</div>
+							<div className="flex gap-2">
+								<Button
+									type="button"
+									size="sm"
+									onClick={handleAddFitnessGoal}
+									disabled={!newGoalName.trim()}
+								>
+									Add Goal
+								</Button>
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									onClick={() => {
+										setShowAddGoal(false);
+										setNewGoalName("");
+									}}
+								>
+									Cancel
+								</Button>
+							</div>
+						</div>
+					)}
 				</div>
 
 				<div className="space-y-2">
@@ -305,6 +501,155 @@ export function WorkoutForm({ members }: WorkoutFormProps) {
 													))}
 												</SelectContent>
 											</Select>
+											<Dialog>
+												<DialogTrigger asChild>
+													<Button type="button" variant="outline" size="sm">
+														<Plus className="h-4 w-4 mr-1" />
+														Add Exercise
+													</Button>
+												</DialogTrigger>
+												<DialogContent>
+													<DialogHeader>
+														<DialogTitle>Add New Exercise</DialogTitle>
+														<DialogDescription>
+															Add a new exercise to the library
+														</DialogDescription>
+													</DialogHeader>
+													<div className="space-y-4">
+														<div className="space-y-2">
+															<Label htmlFor="exerciseName">
+																Exercise Name *
+															</Label>
+															<Input
+																id="exerciseName"
+																value={newExercise.name}
+																onChange={(e) =>
+																	setNewExercise((prev) => ({
+																		...prev,
+																		name: e.target.value,
+																	}))
+																}
+																placeholder="e.g. Bench Press"
+															/>
+														</div>
+														<div className="space-y-2">
+															<Label htmlFor="exerciseCategory">
+																Category *
+															</Label>
+															<Select
+																value={newExercise.category}
+																onValueChange={(value) =>
+																	setNewExercise((prev) => ({
+																		...prev,
+																		category: value,
+																	}))
+																}
+															>
+																<SelectTrigger>
+																	<SelectValue />
+																</SelectTrigger>
+																<SelectContent>
+																	{categories
+																		.filter((cat) => cat !== "All")
+																		.map((cat) => (
+																			<SelectItem key={cat} value={cat}>
+																				{cat}
+																			</SelectItem>
+																		))}
+																</SelectContent>
+															</Select>
+														</div>
+														<div className="space-y-2">
+															<Label htmlFor="exerciseEquipment">
+																Equipment *
+															</Label>
+															<Select
+																value={newExercise.equipment}
+																onValueChange={(value) =>
+																	setNewExercise((prev) => ({
+																		...prev,
+																		equipment: value,
+																	}))
+																}
+															>
+																<SelectTrigger>
+																	<SelectValue />
+																</SelectTrigger>
+																<SelectContent>
+																	<SelectItem value="Bodyweight">
+																		Bodyweight
+																	</SelectItem>
+																	<SelectItem value="Barbell">
+																		Barbell
+																	</SelectItem>
+																	<SelectItem value="Dumbbell">
+																		Dumbbell
+																	</SelectItem>
+																	<SelectItem value="Cable">Cable</SelectItem>
+																	<SelectItem value="Machine">
+																		Machine
+																	</SelectItem>
+																	<SelectItem value="Equipment">
+																		Equipment
+																	</SelectItem>
+																</SelectContent>
+															</Select>
+														</div>
+														<div className="space-y-2">
+															<Label htmlFor="exerciseDifficulty">
+																Difficulty *
+															</Label>
+															<Select
+																value={newExercise.difficulty}
+																onValueChange={(value) =>
+																	setNewExercise((prev) => ({
+																		...prev,
+																		difficulty: value,
+																	}))
+																}
+															>
+																<SelectTrigger>
+																	<SelectValue />
+																</SelectTrigger>
+																<SelectContent>
+																	<SelectItem value="BEGINNER">
+																		Beginner
+																	</SelectItem>
+																	<SelectItem value="INTERMEDIATE">
+																		Intermediate
+																	</SelectItem>
+																	<SelectItem value="ADVANCED">
+																		Advanced
+																	</SelectItem>
+																</SelectContent>
+															</Select>
+														</div>
+													</div>
+													<DialogFooter>
+														<Button
+															type="button"
+															variant="outline"
+															onClick={() => {
+																setNewExercise({
+																	name: "",
+																	category: "Chest",
+																	equipment: "Bodyweight",
+																	difficulty: "BEGINNER",
+																});
+															}}
+														>
+															Cancel
+														</Button>
+														<Button
+															type="button"
+															onClick={handleAddExercise}
+															disabled={!newExercise.name.trim()}
+														>
+															Add Exercise
+														</Button>
+													</DialogFooter>
+												</DialogContent>
+											</Dialog>
 											{exercises.length > 1 && (
 												<Button
 													type="button"

@@ -35,6 +35,14 @@ export default function PaymentForm({ members }: PaymentFormProps) {
 	const router = useRouter();
 	const [loading, setLoading] = useState(false);
 	const [selectedMember, setSelectedMember] = useState<string>("");
+	const [amount, setAmount] = useState<string>("");
+	const [gstPercentage, setGstPercentage] = useState<string>("");
+
+	const baseAmount = parseFloat(amount) || 0;
+	const gstRate = parseFloat(gstPercentage) || 0;
+	const gstAmount =
+		baseAmount > 0 && gstRate > 0 ? (baseAmount * gstRate) / 100 : 0;
+	const totalAmount = baseAmount + gstAmount;
 
 	async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
 		e.preventDefault();
@@ -52,6 +60,10 @@ export default function PaymentForm({ members }: PaymentFormProps) {
 				| "BANK_TRANSFER",
 			notes: (formData.get("notes") as string) || undefined,
 			membershipId: (formData.get("membershipId") as string) || undefined,
+			gstNumber: (formData.get("gstNumber") as string) || undefined,
+			gstPercentage: formData.get("gstPercentage")
+				? parseFloat(formData.get("gstPercentage") as string)
+				: undefined,
 		};
 
 		try {
@@ -125,7 +137,7 @@ export default function PaymentForm({ members }: PaymentFormProps) {
 
 				{/* Amount */}
 				<div className="space-y-2">
-					<Label htmlFor="amount">Amount *</Label>
+					<Label htmlFor="amount">Base Amount (excluding GST) *</Label>
 					<Input
 						id="amount"
 						name="amount"
@@ -133,6 +145,8 @@ export default function PaymentForm({ members }: PaymentFormProps) {
 						step="0.01"
 						min="0"
 						placeholder="0.00"
+						value={amount}
+						onChange={(e) => setAmount(e.target.value)}
 						disabled={loading}
 						required
 					/>
@@ -154,6 +168,56 @@ export default function PaymentForm({ members }: PaymentFormProps) {
 						</SelectContent>
 					</Select>
 				</div>
+
+				{/* GST Number */}
+				<div className="space-y-2">
+					<Label htmlFor="gstNumber">GST Number (Optional)</Label>
+					<Input
+						id="gstNumber"
+						name="gstNumber"
+						type="text"
+						placeholder="22AAAAA0000A1Z5"
+						disabled={loading}
+					/>
+				</div>
+
+				{/* GST Percentage */}
+				<div className="space-y-2">
+					<Label htmlFor="gstPercentage">GST Percentage (Optional)</Label>
+					<Input
+						id="gstPercentage"
+						name="gstPercentage"
+						type="number"
+						step="0.01"
+						min="0"
+						max="100"
+						placeholder="18.00"
+						value={gstPercentage}
+						onChange={(e) => setGstPercentage(e.target.value)}
+						disabled={loading}
+					/>
+				</div>
+
+				{/* GST Calculation Display */}
+				{gstAmount > 0 && (
+					<div className="space-y-2 p-4 bg-gray-50 rounded-lg col-span-2">
+						<h4 className="font-medium text-sm">GST Calculation</h4>
+						<div className="space-y-1 text-sm">
+							<div className="flex justify-between">
+								<span>Base Amount:</span>
+								<span>₹{baseAmount.toFixed(2)}</span>
+							</div>
+							<div className="flex justify-between">
+								<span>GST ({gstRate}%):</span>
+								<span>₹{gstAmount.toFixed(2)}</span>
+							</div>
+							<div className="flex justify-between font-semibold border-t pt-1">
+								<span>Total Amount:</span>
+								<span>₹{totalAmount.toFixed(2)}</span>
+							</div>
+						</div>
+					</div>
+				)}
 			</div>
 
 			{/* Notes */}

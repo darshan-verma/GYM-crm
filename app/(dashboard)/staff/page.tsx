@@ -1,10 +1,18 @@
 import { getUsers } from "@/lib/actions/users";
 import { auth } from "@/lib/auth";
-import { requireAdmin } from "@/lib/utils/permissions";
+import { requireAdminOrSuperAdmin } from "@/lib/utils/permissions";
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Plus, Mail, Phone, Shield, User, Briefcase } from "lucide-react";
+import {
+	Plus,
+	Mail,
+	Phone,
+	Shield,
+	User,
+	Briefcase,
+	Crown,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface StaffUser {
@@ -19,7 +27,7 @@ interface StaffUser {
 export default async function StaffPage() {
 	const session = await auth();
 
-	if (!requireAdmin(session?.user?.role)) {
+	if (!requireAdminOrSuperAdmin(session?.user?.role)) {
 		redirect("/");
 	}
 
@@ -27,6 +35,13 @@ export default async function StaffPage() {
 
 	const getRoleBadge = (role: string) => {
 		switch (role) {
+			case "SUPER_ADMIN":
+				return (
+					<Badge className="bg-red-100 text-red-800">
+						<Crown className="h-3 w-3 mr-1" />
+						Super Admin
+					</Badge>
+				);
 			case "ADMIN":
 				return (
 					<Badge className="bg-purple-100 text-purple-800">
@@ -46,6 +61,13 @@ export default async function StaffPage() {
 					<Badge className="bg-green-100 text-green-800">
 						<User className="h-3 w-3 mr-1" />
 						Receptionist
+					</Badge>
+				);
+			case "HELPER":
+				return (
+					<Badge className="bg-orange-100 text-orange-800">
+						<User className="h-3 w-3 mr-1" />
+						Helper
 					</Badge>
 				);
 			default:
@@ -152,6 +174,10 @@ export default async function StaffPage() {
 				<h3 className="font-semibold text-blue-900 mb-2">Role Permissions</h3>
 				<ul className="space-y-1 text-sm text-blue-800">
 					<li>
+						<strong>Super Admin:</strong> Complete system access including user
+						management and system configuration
+					</li>
+					<li>
 						<strong>Admin:</strong> Full access to all features including
 						settings and user management
 					</li>
@@ -162,6 +188,10 @@ export default async function StaffPage() {
 					<li>
 						<strong>Receptionist:</strong> Can manage members, attendance,
 						payments, and leads
+					</li>
+					<li>
+						<strong>Helper:</strong> Basic access for support tasks including
+						viewing members and marking attendance
 					</li>
 				</ul>
 			</div>

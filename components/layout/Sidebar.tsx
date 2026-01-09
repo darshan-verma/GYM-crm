@@ -24,59 +24,82 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { signOut } from "next-auth/react";
 
+import { hasSpecificPermission } from "@/lib/utils/permissions";
+import { Permission } from "@prisma/client";
+
 const navigation = [
 	{
 		name: "Dashboard",
 		href: "/",
 		icon: LayoutDashboard,
-		roles: ["ADMIN", "TRAINER", "RECEPTIONIST"],
+		permission: Permission.VIEW_DASHBOARD,
 	},
 	{
 		name: "Members",
 		href: "/members",
 		icon: Users,
-		roles: ["ADMIN", "TRAINER", "RECEPTIONIST"],
+		permission: Permission.VIEW_MEMBERS,
 	},
 	{
 		name: "Billing",
 		href: "/billing",
 		icon: CreditCard,
-		roles: ["ADMIN", "RECEPTIONIST"],
+		permission: Permission.VIEW_BILLING,
 	},
-	{ name: "Trainers", href: "/trainers", icon: UserCheck, roles: ["ADMIN"] },
-	{ name: "Staff", href: "/staff", icon: Shield, roles: ["ADMIN"] },
+	{
+		name: "Trainers",
+		href: "/trainers",
+		icon: UserCheck,
+		permission: Permission.VIEW_STAFF,
+	},
+	{
+		name: "Staff",
+		href: "/staff",
+		icon: Shield,
+		permission: Permission.VIEW_STAFF,
+	},
 	{
 		name: "Attendance",
 		href: "/attendance",
 		icon: Calendar,
-		roles: ["ADMIN", "TRAINER", "RECEPTIONIST"],
+		permission: Permission.VIEW_ATTENDANCE,
 	},
 	{
 		name: "Leads",
 		href: "/leads",
 		icon: Megaphone,
-		roles: ["ADMIN", "RECEPTIONIST"],
+		permission: Permission.VIEW_LEADS,
 	},
 	{
 		name: "Memberships",
 		href: "/memberships",
 		icon: CreditCard,
-		roles: ["ADMIN"],
+		permission: Permission.VIEW_BILLING,
 	},
 	{
 		name: "Workouts",
 		href: "/workouts",
 		icon: Dumbbell,
-		roles: ["ADMIN", "TRAINER"],
+		permission: Permission.VIEW_WORKOUTS,
 	},
 	{
 		name: "Diet Plans",
 		href: "/diets",
 		icon: UtensilsCrossed,
-		roles: ["ADMIN", "TRAINER"],
+		permission: Permission.VIEW_DIETS,
 	},
-	{ name: "Reports", href: "/reports", icon: BarChart3, roles: ["ADMIN"] },
-	{ name: "Settings", href: "/settings", icon: Settings, roles: ["ADMIN"] },
+	{
+		name: "Reports",
+		href: "/reports",
+		icon: BarChart3,
+		permission: Permission.VIEW_REPORTS,
+	},
+	{
+		name: "Settings",
+		href: "/settings",
+		icon: Settings,
+		permission: Permission.VIEW_SETTINGS,
+	},
 ];
 
 export default function Sidebar({
@@ -88,6 +111,7 @@ export default function Sidebar({
 		email?: string | null;
 		role: string;
 		image?: string | null;
+		permissions?: Permission[];
 	};
 }) {
 	const pathname = usePathname();
@@ -134,8 +158,11 @@ export default function Sidebar({
 					{/* Navigation */}
 					<nav className="flex-1 overflow-y-auto p-4 space-y-1">
 						{navigation
-							.filter((item) =>
-								item.roles.includes(user?.role || "RECEPTIONIST")
+							.filter(
+								(item) =>
+									!user?.permissions ||
+									user.permissions.length === 0 ||
+									hasSpecificPermission(user?.permissions, item.permission)
 							)
 							.map((item) => {
 								const isActive =

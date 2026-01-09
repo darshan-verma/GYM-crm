@@ -10,9 +10,63 @@ datasource db {
 }
 
 enum UserRole {
+  SUPER_ADMIN
   ADMIN
   TRAINER
   RECEPTIONIST
+  HELPER
+}
+
+enum Permission {
+  // Dashboard access
+  VIEW_DASHBOARD
+  
+  // Member management
+  VIEW_MEMBERS
+  CREATE_MEMBERS
+  EDIT_MEMBERS
+  DELETE_MEMBERS
+  
+  // Billing and payments
+  VIEW_BILLING
+  CREATE_PAYMENTS
+  EDIT_PAYMENTS
+  VIEW_INVOICES
+  CREATE_INVOICES
+  
+  // Workout management
+  VIEW_WORKOUTS
+  CREATE_WORKOUTS
+  EDIT_WORKOUTS
+  DELETE_WORKOUTS
+  
+  // Diet management
+  VIEW_DIETS
+  CREATE_DIETS
+  EDIT_DIETS
+  DELETE_DIETS
+  
+  // Attendance
+  VIEW_ATTENDANCE
+  MARK_ATTENDANCE
+  
+  // Leads
+  VIEW_LEADS
+  CREATE_LEADS
+  EDIT_LEADS
+  
+  // Reports
+  VIEW_REPORTS
+  
+  // Staff management (only for admins)
+  VIEW_STAFF
+  CREATE_STAFF
+  EDIT_STAFF
+  DELETE_STAFF
+  
+  // Settings (only for admins)
+  VIEW_SETTINGS
+  EDIT_SETTINGS
 }
 
 enum MembershipStatus {
@@ -65,6 +119,7 @@ model User {
   password  String
   name      String
   role      UserRole @default(RECEPTIONIST)
+  permissions Permission[]
   phone     String?
   avatar    String?
   active    Boolean  @default(true)
@@ -172,6 +227,9 @@ model Payment {
   referenceNumber String?
   notes           String?
   receiptPath     String?
+  gstNumber       String?
+  gstPercentage   Decimal?    @db.Decimal(5, 2)
+  gstAmount       Decimal?    @db.Decimal(10, 2)
   createdBy       String?
   createdAt       DateTime    @default(now())
 
@@ -232,7 +290,7 @@ model WorkoutPlan {
   description String?
   exercises   Json // [{name, sets, reps, weight, restTime, notes, videoUrl}]
   difficulty  String? // BEGINNER, INTERMEDIATE, ADVANCED
-  goal        String? // WEIGHT_LOSS, MUSCLE_GAIN, ENDURANCE
+  goalId      String?
   startDate   DateTime @default(now())
   endDate     DateTime?
   active      Boolean  @default(true)
@@ -240,9 +298,11 @@ model WorkoutPlan {
   updatedAt   DateTime @updatedAt
 
   member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  goal   FitnessGoal? @relation(fields: [goalId], references: [id], onDelete: SetNull)
 
   @@index([memberId])
   @@index([active])
+  @@index([goalId])
 }
 
 model DietPlan {
@@ -250,20 +310,36 @@ model DietPlan {
   memberId      String
   name          String
   description   String?
+  goal          String?
   meals         Json // [{mealTime, items, calories, protein, carbs, fats, notes}]
   totalCalories Int?
   totalProtein  Int?
-  goal          String? // WEIGHT_LOSS, MUSCLE_GAIN, MAINTENANCE
+  dietTypeId    String?
   startDate     DateTime @default(now())
   endDate       DateTime?
   active        Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  member   Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  dietType DietType? @relation(fields: [dietTypeId], references: [id], onDelete: SetNull)
 
   @@index([memberId])
   @@index([active])
+  @@index([dietTypeId])
+}
+
+model FitnessGoal {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isDefault   Boolean  @default(false) // Predefined goals cannot be deleted
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workoutPlans WorkoutPlan[]
+
+  @@index([name])
 }
 
 model Notification {
@@ -307,4 +383,47 @@ model SystemSettings {
   updatedAt DateTime @updatedAt
 
   @@index([key])
+}
+
+model DietType {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isDefault   Boolean  @default(false) // Predefined types cannot be deleted
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  dietPlans DietPlan[]
+
+  @@index([name])
+}
+
+model Food {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  calories    Int
+  protein     Decimal  @db.Decimal(5, 2)
+  carbs       Decimal  @db.Decimal(5, 2)
+  fat         Decimal  @db.Decimal(5, 2)
+  category    String
+  isDefault   Boolean  @default(false) // Predefined foods cannot be deleted
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
+  @@index([category])
+}
+
+model Exercise {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  category    String
+  equipment   String
+  difficulty  String   // BEGINNER, INTERMEDIATE, ADVANCED
+  isDefault   Boolean  @default(false) // Predefined exercises cannot be deleted
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
+  @@index([category])
 }

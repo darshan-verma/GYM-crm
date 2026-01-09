@@ -11,6 +11,8 @@ export async function createPayment(data: {
 	paymentMode: PaymentMode;
 	notes?: string;
 	membershipId?: string;
+	gstNumber?: string;
+	gstPercentage?: number;
 }) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
@@ -77,15 +79,26 @@ export async function createPayment(data: {
 			"0"
 		)}`;
 
+		// Calculate GST amount if GST percentage is provided
+		let gstAmount: number | undefined;
+		let totalAmount = data.amount;
+		if (data.gstPercentage && data.gstPercentage > 0) {
+			gstAmount = (data.amount * data.gstPercentage) / 100;
+			totalAmount = data.amount + gstAmount;
+		}
+
 		// Create payment record
 		const payment = await prisma.payment.create({
 			data: {
 				memberId: data.memberId,
-				amount: data.amount,
+				amount: totalAmount,
 				paymentMode: data.paymentMode,
 				transactionId,
 				notes: data.notes,
 				invoiceNumber,
+				gstNumber: data.gstNumber,
+				gstPercentage: data.gstPercentage,
+				gstAmount: gstAmount,
 				createdBy: session.user.id,
 				paymentDate: new Date(),
 			},
@@ -130,7 +143,7 @@ export async function createPayment(data: {
 				entity: "Payment",
 				entityId: payment.id,
 				details: {
-					amount: data.amount,
+					amount: totalAmount,
 					invoiceNumber,
 					memberName: member.name,
 				},
@@ -141,7 +154,10 @@ export async function createPayment(data: {
 		revalidatePath("/billing/payments");
 		revalidatePath(`/members/${data.memberId}`);
 
-		return { success: true, data: payment };
+		// Serialize the payment data to convert Decimal objects to plain numbers
+		const serializedPayment = JSON.parse(JSON.stringify(payment));
+
+		return { success: true, data: serializedPayment };
 	} catch (error) {
 		console.error("Payment error:", error);
 		return { success: false, error: "Failed to process payment" };

@@ -15,9 +15,21 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createDietPlan } from "@/lib/actions/diets";
+import {
+	createDietType,
+	getDietTypes,
+	seedDefaultDietTypes,
+} from "@/lib/actions/diet-types";
+import {
+	createFood,
+	getFoods,
+	getFoodCategories,
+	seedDefaultFoods,
+} from "@/lib/actions/foods";
 import { foodDatabase } from "@/lib/data/food-database";
 import { Plus, Trash2, UtensilsCrossed } from "lucide-react";
 import { toast } from "sonner";
+import { useEffect } from "react";
 
 interface Member {
 	id: string;
@@ -36,16 +48,58 @@ interface Meal {
 	foods: FoodItem[];
 }
 
-export default function DietForm({ members }: { members: Member[] }) {
+interface DietFormProps {
+	members: Member[];
+	dietTypes: Array<{
+		id: string;
+		name: string;
+		description?: string;
+		isDefault: boolean;
+	}>;
+	foods: Array<{
+		id: string;
+		name: string;
+		calories: number;
+		protein: number;
+		carbs: number;
+		fat: number;
+		category: string;
+		isDefault: boolean;
+	}>;
+	foodCategories: string[];
+}
+
+export default function DietForm({
+	members,
+	dietTypes: initialDietTypes,
+	foods: initialFoods,
+	foodCategories: initialCategories,
+}: DietFormProps) {
 	const router = useRouter();
 	const [loading, setLoading] = useState(false);
 	const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
+	const [dietTypes, setDietTypes] = useState(initialDietTypes);
+	const [showAddType, setShowAddType] = useState(false);
+	const [newTypeName, setNewTypeName] = useState("");
+	const [foods, setFoods] = useState(initialFoods);
+	const [foodCategories, setFoodCategories] = useState(initialCategories);
+	const [showAddFood, setShowAddFood] = useState(false);
+	const [newFoodData, setNewFoodData] = useState({
+		name: "",
+		calories: 0,
+		protein: 0,
+		carbs: 0,
+		fat: 0,
+		category: "",
+	});
+	const [showAddCategory, setShowAddCategory] = useState(false);
+	const [newCategoryName, setNewCategoryName] = useState("");
 
 	const [formData, setFormData] = useState({
 		memberId: "",
 		name: "",
 		description: "",
-		dietType: "",
+		dietTypeId: "",
 		calorieTarget: 0,
 		proteinTarget: 0,
 		carbTarget: 0,
@@ -58,20 +112,129 @@ export default function DietForm({ members }: { members: Member[] }) {
 		{ mealName: "Breakfast", foods: [] },
 	]);
 
-	const categories = [
-		"ALL",
-		"PROTEIN",
-		"CARBS",
-		"VEGETABLES",
-		"FRUITS",
-		"FATS",
-		"SNACKS",
-	];
+	useEffect(() => {
+		// Seed default diet types if none exist
+		if (dietTypes.length === 0) {
+			seedDefaultDietTypes()
+				.then(() => {
+					// Refresh the diet types
+					getDietTypes().then((types) => {
+						setDietTypes(
+							types.map((type) => ({
+								...type,
+								description: type.description || undefined,
+							}))
+						);
+					});
+				})
+				.catch(console.error);
+		}
+
+		// Seed default foods if none exist
+		if (foods.length === 0) {
+			seedDefaultFoods()
+				.then(() => {
+					// Refresh the foods and categories
+					Promise.all([getFoods(), getFoodCategories()]).then(
+						([foodsData, categoriesData]) => {
+							setFoods(foodsData);
+							setFoodCategories(categoriesData);
+						}
+					);
+				})
+				.catch(console.error);
+		}
+	}, [dietTypes.length, foods.length]);
+
+	const handleAddDietType = async () => {
+		if (!newTypeName.trim()) return;
+
+		try {
+			const result = await createDietType({
+				name: newTypeName.trim(),
+			});
+
+			setDietTypes((prev) => [
+				...prev,
+				{
+					...result,
+					description: result.description || undefined,
+				},
+			]);
+			setFormData((prev) => ({ ...prev, dietTypeId: result.id })); // Auto-select the new type
+			setNewTypeName("");
+			setShowAddType(false);
+			toast.success("Diet type added successfully");
+		} catch (error) {
+			toast.error(
+				error instanceof Error ? error.message : "Failed to add diet type"
+			);
+		}
+	};
+
+	const handleAddFood = async () => {
+		if (!newFoodData.name.trim() || !newFoodData.category.trim()) return;
+
+		try {
+			const result = await createFood({
+				name: newFoodData.name.trim(),
+				calories: newFoodData.calories,
+				protein: newFoodData.protein,
+				carbs: newFoodData.carbs,
+				fat: newFoodData.fat,
+				category: newFoodData.category.trim(),
+			});
+
+			const transformedResult = {
+				...result,
+				protein: Number(result.protein),
+				carbs: Number(result.carbs),
+				fat: Number(result.fat),
+			};
+
+			setFoods((prev) => [...prev, transformedResult]);
+			// Update categories if new category was added
+			if (!foodCategories.includes(result.category)) {
+				setFoodCategories((prev) => [...prev, result.category].sort());
+			}
+			setNewFoodData({
+				name: "",
+				calories: 0,
+				protein: 0,
+				carbs: 0,
+				fat: 0,
+				category: "",
+			});
+			setShowAddFood(false);
+			toast.success("Food added successfully");
+		} catch (error) {
+			toast.error(
+				error instanceof Error ? error.message : "Failed to add food"
+			);
+		}
+	};
+
+	const handleAddCategory = async () => {
+		if (!newCategoryName.trim()) return;
+
+		const categoryName = newCategoryName.trim().toUpperCase();
+		if (foodCategories.includes(categoryName)) {
+			toast.error("Category already exists");
+			return;
+		}
+
+		setFoodCategories((prev) => [...prev, categoryName].sort());
+		setNewCategoryName("");
+		setShowAddCategory(false);
+		toast.success("Category added successfully");
+	};
+
+	const categories = ["ALL", ...foodCategories];
 
 	const filteredFoods =
 		selectedCategory === "ALL"
-			? foodDatabase
-			: foodDatabase.filter((food) => food.category === selectedCategory);
+			? foods
+			: foods.filter((food) => food.category === selectedCategory);
 
 	const addMeal = () => {
 		setMeals([...meals, { mealName: "", foods: [] }]);
@@ -127,7 +290,7 @@ export default function DietForm({ members }: { members: Member[] }) {
 
 		meals.forEach((meal) => {
 			meal.foods.forEach((foodItem) => {
-				const food = foodDatabase.find((f) => f.name === foodItem.foodName);
+				const food = foods.find((f) => f.name === foodItem.foodName);
 				if (food) {
 					let multiplier = foodItem.portion || 1;
 
@@ -286,43 +449,87 @@ export default function DietForm({ members }: { members: Member[] }) {
 						/>
 					</div>
 
-					<div className="grid gap-4 md:grid-cols-2">
-						<div className="space-y-2">
-							<Label htmlFor="dietType">Diet Type</Label>
+					<div className="space-y-2">
+						<Label htmlFor="dietType">Diet Type</Label>
+						<div className="flex gap-2">
 							<Select
-								value={formData.dietType}
+								value={formData.dietTypeId}
 								onValueChange={(value) =>
-									setFormData({ ...formData, dietType: value })
+									setFormData((prev) => ({ ...prev, dietTypeId: value }))
 								}
 							>
-								<SelectTrigger>
+								<SelectTrigger className="w-64">
 									<SelectValue placeholder="Select diet type" />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="WEIGHT_LOSS">Weight Loss</SelectItem>
-									<SelectItem value="MUSCLE_GAIN">Muscle Gain</SelectItem>
-									<SelectItem value="MAINTENANCE">Maintenance</SelectItem>
-									<SelectItem value="KETO">Keto</SelectItem>
-									<SelectItem value="VEGETARIAN">Vegetarian</SelectItem>
+									{dietTypes.map((type) => (
+										<SelectItem key={type.id} value={type.id}>
+											{type.name}
+										</SelectItem>
+									))}
 								</SelectContent>
 							</Select>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								onClick={() => setShowAddType(!showAddType)}
+							>
+								<Plus className="h-4 w-4 mr-1" />
+								Add Type
+							</Button>
 						</div>
 
-						<div className="space-y-2">
-							<Label htmlFor="calorieTarget">Daily Calorie Target</Label>
-							<Input
-								id="calorieTarget"
-								type="number"
-								value={formData.calorieTarget || ""}
-								onChange={(e) =>
-									setFormData({
-										...formData,
-										calorieTarget: parseInt(e.target.value) || 0,
-									})
-								}
-								placeholder="e.g., 2000"
-							/>
-						</div>
+						{showAddType && (
+							<div className="space-y-2 p-3 border rounded-lg bg-gray-50">
+								<div>
+									<Label htmlFor="newTypeName">Type Name *</Label>
+									<Input
+										id="newTypeName"
+										value={newTypeName}
+										onChange={(e) => setNewTypeName(e.target.value)}
+										placeholder="Enter diet type name"
+									/>
+								</div>
+								<div className="flex gap-2">
+									<Button
+										type="button"
+										size="sm"
+										onClick={handleAddDietType}
+										disabled={!newTypeName.trim()}
+									>
+										Add Type
+									</Button>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										onClick={() => {
+											setShowAddType(false);
+											setNewTypeName("");
+										}}
+									>
+										Cancel
+									</Button>
+								</div>
+							</div>
+						)}
+					</div>
+
+					<div className="space-y-2">
+						<Label htmlFor="calorieTarget">Daily Calorie Target</Label>
+						<Input
+							id="calorieTarget"
+							type="number"
+							value={formData.calorieTarget || ""}
+							onChange={(e) =>
+								setFormData({
+									...formData,
+									calorieTarget: parseInt(e.target.value) || 0,
+								})
+							}
+							placeholder="e.g., 2000"
+						/>
 					</div>
 
 					<div className="grid gap-4 md:grid-cols-3">
@@ -516,7 +723,29 @@ export default function DietForm({ members }: { members: Member[] }) {
 									</div>
 
 									<div className="border-t pt-3">
-										<Label className="mb-2 block">Add Food to Meal</Label>
+										<div className="flex items-center justify-between mb-2">
+											<Label>Add Food to Meal</Label>
+											<div className="flex gap-2">
+												<Button
+													type="button"
+													variant="outline"
+													size="sm"
+													onClick={() => setShowAddFood(true)}
+												>
+													<Plus className="h-4 w-4 mr-1" />
+													Add Food
+												</Button>
+												<Button
+													type="button"
+													variant="outline"
+													size="sm"
+													onClick={() => setShowAddCategory(true)}
+												>
+													<Plus className="h-4 w-4 mr-1" />
+													Add Category
+												</Button>
+											</div>
+										</div>
 										<div className="flex gap-2 mb-3 flex-wrap">
 											{categories.map((cat) => (
 												<Button
@@ -601,6 +830,189 @@ export default function DietForm({ members }: { members: Member[] }) {
 					</div>
 				</CardContent>
 			</Card>
+
+			{/* Add Food Dialog */}
+			{showAddFood && (
+				<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+					<div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
+						<h3 className="text-lg font-semibold mb-4">Add New Food</h3>
+						<div className="space-y-4">
+							<div>
+								<Label htmlFor="foodName">Food Name *</Label>
+								<Input
+									id="foodName"
+									value={newFoodData.name}
+									onChange={(e) =>
+										setNewFoodData((prev) => ({
+											...prev,
+											name: e.target.value,
+										}))
+									}
+									placeholder="e.g., Chicken Breast"
+								/>
+							</div>
+							<div className="grid grid-cols-2 gap-4">
+								<div>
+									<Label htmlFor="foodCalories">Calories</Label>
+									<Input
+										id="foodCalories"
+										type="number"
+										value={newFoodData.calories || ""}
+										onChange={(e) =>
+											setNewFoodData((prev) => ({
+												...prev,
+												calories: parseInt(e.target.value) || 0,
+											}))
+										}
+										placeholder="165"
+									/>
+								</div>
+								<div>
+									<Label htmlFor="foodCategory">Category *</Label>
+									<Select
+										value={newFoodData.category}
+										onValueChange={(value) =>
+											setNewFoodData((prev) => ({ ...prev, category: value }))
+										}
+									>
+										<SelectTrigger>
+											<SelectValue placeholder="Select category" />
+										</SelectTrigger>
+										<SelectContent>
+											{foodCategories.map((cat) => (
+												<SelectItem key={cat} value={cat}>
+													{cat}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</div>
+							</div>
+							<div className="grid grid-cols-3 gap-4">
+								<div>
+									<Label htmlFor="foodProtein">Protein (g)</Label>
+									<Input
+										id="foodProtein"
+										type="number"
+										step="0.1"
+										value={newFoodData.protein || ""}
+										onChange={(e) =>
+											setNewFoodData((prev) => ({
+												...prev,
+												protein: parseFloat(e.target.value) || 0,
+											}))
+										}
+										placeholder="31"
+									/>
+								</div>
+								<div>
+									<Label htmlFor="foodCarbs">Carbs (g)</Label>
+									<Input
+										id="foodCarbs"
+										type="number"
+										step="0.1"
+										value={newFoodData.carbs || ""}
+										onChange={(e) =>
+											setNewFoodData((prev) => ({
+												...prev,
+												carbs: parseFloat(e.target.value) || 0,
+											}))
+										}
+										placeholder="0"
+									/>
+								</div>
+								<div>
+									<Label htmlFor="foodFat">Fat (g)</Label>
+									<Input
+										id="foodFat"
+										type="number"
+										step="0.1"
+										value={newFoodData.fat || ""}
+										onChange={(e) =>
+											setNewFoodData((prev) => ({
+												...prev,
+												fat: parseFloat(e.target.value) || 0,
+											}))
+										}
+										placeholder="3.6"
+									/>
+								</div>
+							</div>
+							<div className="flex gap-2 justify-end">
+								<Button
+									type="button"
+									variant="outline"
+									onClick={() => {
+										setShowAddFood(false);
+										setNewFoodData({
+											name: "",
+											calories: 0,
+											protein: 0,
+											carbs: 0,
+											fat: 0,
+											category: "",
+										});
+									}}
+								>
+									Cancel
+								</Button>
+								<Button
+									type="button"
+									onClick={handleAddFood}
+									disabled={
+										!newFoodData.name.trim() || !newFoodData.category.trim()
+									}
+								>
+									Add Food
+								</Button>
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* Add Category Dialog */}
+			{showAddCategory && (
+				<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+					<div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
+						<h3 className="text-lg font-semibold mb-4">Add New Category</h3>
+						<div className="space-y-4">
+							<div>
+								<Label htmlFor="categoryName">Category Name *</Label>
+								<Input
+									id="categoryName"
+									value={newCategoryName}
+									onChange={(e) => setNewCategoryName(e.target.value)}
+									placeholder="e.g., DAIRY, BEVERAGES"
+									className="uppercase"
+								/>
+								<p className="text-sm text-gray-600 mt-1">
+									Category names will be automatically converted to uppercase
+								</p>
+							</div>
+							<div className="flex gap-2 justify-end">
+								<Button
+									type="button"
+									variant="outline"
+									onClick={() => {
+										setShowAddCategory(false);
+										setNewCategoryName("");
+									}}
+								>
+									Cancel
+								</Button>
+								<Button
+									type="button"
+									onClick={handleAddCategory}
+									disabled={!newCategoryName.trim()}
+								>
+									Add Category
+								</Button>
+							</div>
+						</div>
+					</div>
+				</div>
+			)}
 
 			<div className="flex gap-4">
 				<Button

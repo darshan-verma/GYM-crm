@@ -25,6 +25,9 @@ interface PaymentWithMember {
 	referenceNumber: string | null;
 	notes: string | null;
 	receiptPath: string | null;
+	gstNumber: string | null;
+	gstPercentage: number | null;
+	gstAmount: number | null;
 	createdBy: string | null;
 	createdAt: Date;
 	member: {
@@ -54,11 +57,14 @@ export default async function InvoiceDetailPage({
 	params: Promise<{ id: string }>;
 }) {
 	const { id } = await params;
-	const payment = (await getPayment(id)) as unknown as PaymentWithMember;
+	const paymentData = await getPayment(id);
 
-	if (!payment) {
+	if (!paymentData) {
 		notFound();
 	}
+
+	// Serialize the payment data to convert Decimal objects to plain numbers
+	const payment = JSON.parse(JSON.stringify(paymentData)) as PaymentWithMember;
 
 	return (
 		<div className="space-y-6">
@@ -166,6 +172,18 @@ export default async function InvoiceDetailPage({
 									<span className="font-medium">{payment.transactionId}</span>
 								</div>
 							)}
+							{payment.gstNumber && (
+								<div className="flex justify-between">
+									<span className="text-gray-600">GST Number:</span>
+									<span className="font-medium">{payment.gstNumber}</span>
+								</div>
+							)}
+							{payment.gstPercentage && (
+								<div className="flex justify-between">
+									<span className="text-gray-600">GST Percentage:</span>
+									<span className="font-medium">{payment.gstPercentage}%</span>
+								</div>
+							)}
 						</div>
 					</div>
 				</div>
@@ -247,21 +265,57 @@ export default async function InvoiceDetailPage({
 							</tr>
 						</thead>
 						<tbody className="divide-y">
-							<tr>
-								<td className="py-4 px-4">
-									<div>
-										<p className="font-medium">Membership Payment</p>
-										{payment.notes && (
-											<p className="text-sm text-gray-600 mt-1">
-												{payment.notes}
-											</p>
-										)}
-									</div>
-								</td>
-								<td className="py-4 px-4 text-right font-medium">
-									{formatCurrency(Number(payment.amount))}
-								</td>
-							</tr>
+							{payment.gstAmount && payment.gstAmount > 0 ? (
+								<>
+									<tr>
+										<td className="py-4 px-4">
+											<div>
+												<p className="font-medium">
+													Membership Payment (Subtotal)
+												</p>
+												{payment.notes && (
+													<p className="text-sm text-gray-600 mt-1">
+														{payment.notes}
+													</p>
+												)}
+											</div>
+										</td>
+										<td className="py-4 px-4 text-right font-medium">
+											{formatCurrency(
+												Number(payment.amount) - Number(payment.gstAmount)
+											)}
+										</td>
+									</tr>
+									<tr>
+										<td className="py-4 px-4">
+											<div>
+												<p className="font-medium">
+													GST Amount ({payment.gstPercentage}%)
+												</p>
+											</div>
+										</td>
+										<td className="py-4 px-4 text-right font-medium">
+											{formatCurrency(Number(payment.gstAmount))}
+										</td>
+									</tr>
+								</>
+							) : (
+								<tr>
+									<td className="py-4 px-4">
+										<div>
+											<p className="font-medium">Membership Payment</p>
+											{payment.notes && (
+												<p className="text-sm text-gray-600 mt-1">
+													{payment.notes}
+												</p>
+											)}
+										</div>
+									</td>
+									<td className="py-4 px-4 text-right font-medium">
+										{formatCurrency(Number(payment.amount))}
+									</td>
+								</tr>
+							)}
 						</tbody>
 						<tfoot className="border-t-2 border-gray-900">
 							<tr>

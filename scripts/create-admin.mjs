@@ -11,18 +11,30 @@ async function main() {
 
 	const hashedPassword = await bcrypt.hash("admin123", 10);
 
-	const _admin = await prisma.user.create({
-		data: {
-			email: "admin@probodyline.com",
-			password: hashedPassword,
-			name: "Admin User",
-			role: "ADMIN",
-		},
-	});
+	try {
+		const admin = await prisma.user.create({
+			data: {
+				email: "admin@probodyline.com",
+				password: hashedPassword,
+				name: "Super Admin",
+				role: "SUPER_ADMIN",
+			},
+		});
 
-	console.log("✓ Admin user created successfully!");
-	console.log("Email: admin@probodyline.com");
-	console.log("Password: admin123");
+		console.log("✓ Admin user created successfully!");
+		console.log("Email: admin@probodyline.com");
+		console.log("Password: admin123");
+		console.log("Role: SUPER_ADMIN");
+	} catch (error) {
+		if (error.code === "P2002") {
+			console.log("✓ Admin user already exists!");
+			console.log("Email: admin@probodyline.com");
+			console.log("Password: admin123");
+			console.log("Role: SUPER_ADMIN");
+		} else {
+			throw error;
+		}
+	}
 }
 
 main()

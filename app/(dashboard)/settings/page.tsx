@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/utils/permissions";
+import { requireAdminOrSuperAdmin } from "@/lib/utils/permissions";
 import {
 	Card,
 	CardContent,
@@ -24,7 +24,7 @@ export default async function SettingsPage() {
 		redirect("/login");
 	}
 
-	if (!requireAdmin(session.user?.role)) {
+	if (!requireAdminOrSuperAdmin(session.user?.role)) {
 		redirect("/");
 	}
 

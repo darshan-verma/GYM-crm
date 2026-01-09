@@ -1,7 +1,7 @@
 import { getLeadsByStatus, getLeadStats } from "@/lib/actions/leads";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Users, TrendingUp, Phone } from "lucide-react";
+import { Plus, Users, TrendingUp, Phone, Download } from "lucide-react";
 import Link from "next/link";
 import LeadsPipeline from "@/components/leads/LeadsPipeline";
 
@@ -32,15 +32,23 @@ export default async function LeadsPage() {
 						Track and convert potential members
 					</p>
 				</div>
-				<Button
-					asChild
-					className="bg-gradient-to-r from-orange-600 to-orange-700"
-				>
-					<Link href="/leads/new">
-						<Plus className="w-4 h-4 mr-2" />
-						Add Lead
-					</Link>
-				</Button>
+				<div className="flex gap-3">
+					<Button variant="outline" asChild>
+						<Link href="/api/export/leads">
+							<Download className="w-4 h-4 mr-2" />
+							Export
+						</Link>
+					</Button>
+					<Button
+						asChild
+						className="bg-gradient-to-r from-orange-600 to-orange-700"
+					>
+						<Link href="/leads/new">
+							<Plus className="w-4 h-4 mr-2" />
+							Add Lead
+						</Link>
+					</Button>
+				</div>
 			</div>
 
 			{/* Stats Cards */}

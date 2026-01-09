@@ -117,8 +117,8 @@ export default async function WorkoutPlansPage() {
 										</Badge>
 									)}
 									{plan.goal && (
-										<Badge className={getGoalColor(plan.goal)}>
-											{plan.goal.replace("_", " ")}
+										<Badge className={getGoalColor(plan.goal.name)}>
+											{plan.goal.name.replace("_", " ")}
 										</Badge>
 									)}
 								</div>
