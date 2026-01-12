@@ -12,6 +12,10 @@ export async function createMember(formData: FormData) {
 	if (!session) throw new Error("Unauthorized");
 
 	try {
+		const latitudeStr = formData.get("latitude") as string;
+		const longitudeStr = formData.get("longitude") as string;
+		const formattedAddress = (formData.get("formattedAddress") as string) || null;
+
 		const data = {
 			name: formData.get("name") as string,
 			email: (formData.get("email") as string) || null,
@@ -20,6 +24,9 @@ export async function createMember(formData: FormData) {
 			city: (formData.get("city") as string) || null,
 			state: (formData.get("state") as string) || null,
 			pincode: (formData.get("pincode") as string) || null,
+			latitude: latitudeStr ? parseFloat(latitudeStr) : null,
+			longitude: longitudeStr ? parseFloat(longitudeStr) : null,
+			formattedAddress: formattedAddress,
 			dateOfBirth: formData.get("dateOfBirth") as string,
 			gender: (formData.get("gender") as string) || null,
 			emergencyContact: (formData.get("emergencyContact") as string) || null,
@@ -226,6 +233,10 @@ export async function updateMember(id: string, formData: FormData) {
 	if (!session) throw new Error("Unauthorized");
 
 	try {
+		const latitudeStr = formData.get("latitude") as string;
+		const longitudeStr = formData.get("longitude") as string;
+		const formattedAddress = (formData.get("formattedAddress") as string) || null;
+
 		let data: Record<string, unknown> = {
 			name: formData.get("name") as string,
 			email: (formData.get("email") as string) || null,
@@ -233,6 +244,9 @@ export async function updateMember(id: string, formData: FormData) {
 			address: (formData.get("address") as string) || null,
 			city: (formData.get("city") as string) || null,
 			state: (formData.get("state") as string) || null,
+			latitude: latitudeStr ? parseFloat(latitudeStr) : null,
+			longitude: longitudeStr ? parseFloat(longitudeStr) : null,
+			formattedAddress: formattedAddress,
 			trainerId: (formData.get("trainerId") as string) || null,
 			notes: (formData.get("notes") as string) || null,
 		};

@@ -16,14 +16,15 @@ interface SearchParams {
 export default async function MembersPage({
 	searchParams,
 }: {
-	searchParams: SearchParams;
+	searchParams: Promise<SearchParams>;
 }) {
+	const params = await searchParams;
 	const [membersData, trainers] = await Promise.all([
 		getMembers({
-			search: searchParams.search,
-			status: searchParams.status,
-			trainerId: searchParams.trainerId,
-			page: searchParams.page ? parseInt(searchParams.page) : 1,
+			search: params.search,
+			status: params.status,
+			trainerId: params.trainerId,
+			page: params.page ? parseInt(params.page) : 1,
 			limit: 20,
 		}),
 		getTrainers(),

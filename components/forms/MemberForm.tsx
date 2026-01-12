@@ -17,6 +17,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import LocationPicker from "./LocationPicker";
 
 export interface Member {
 	id: string;
@@ -29,6 +30,9 @@ export interface Member {
 	city?: string;
 	state?: string;
 	pincode?: string;
+	latitude?: number | null;
+	longitude?: number | null;
+	formattedAddress?: string | null;
 	bloodGroup?: string;
 	medicalConditions?: string;
 	emergencyName?: string;
@@ -64,6 +68,27 @@ export default function MemberForm({
 	const router = useRouter();
 	const [loading, setLoading] = useState(false);
 	const [photoPreview, setPhotoPreview] = useState(initialData?.photo || "");
+	const [locationData, setLocationData] = useState<{
+		address: string;
+		formattedAddress: string;
+		latitude: number;
+		longitude: number;
+		city?: string;
+		state?: string;
+		pincode?: string;
+	} | null>(
+		initialData?.latitude && initialData?.longitude
+			? {
+					address: initialData.formattedAddress || initialData.address || "",
+					formattedAddress: initialData.formattedAddress || initialData.address || "",
+					latitude: initialData.latitude,
+					longitude: initialData.longitude,
+					city: initialData.city,
+					state: initialData.state,
+					pincode: initialData.pincode,
+			  }
+			: null
+	);
 
 	async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
 		e.preventDefault();
@@ -77,6 +102,28 @@ export default function MemberForm({
 		}
 		if (formData.get("membershipPlanId") === "none") {
 			formData.set("membershipPlanId", "");
+		}
+
+		// Handle location data
+		if (locationData) {
+			formData.set("latitude", locationData.latitude.toString());
+			formData.set("longitude", locationData.longitude.toString());
+			formData.set("formattedAddress", locationData.formattedAddress);
+			// Update city, state, pincode if provided by location picker
+			if (locationData.city) {
+				formData.set("city", locationData.city);
+			}
+			if (locationData.state) {
+				formData.set("state", locationData.state);
+			}
+			if (locationData.pincode) {
+				formData.set("pincode", locationData.pincode);
+			}
+		} else {
+			// Clear location fields if location is cleared
+			formData.set("latitude", "");
+			formData.set("longitude", "");
+			formData.set("formattedAddress", "");
 		}
 
 		try {
@@ -284,6 +331,21 @@ export default function MemberForm({
 						/>
 					</div>
 				</div>
+
+				{/* Location Picker with Google Maps */}
+				<LocationPicker
+					onLocationChange={setLocationData}
+					initialLocation={
+						initialData?.latitude && initialData?.longitude
+							? {
+									formattedAddress: initialData.formattedAddress || undefined,
+									latitude: initialData.latitude,
+									longitude: initialData.longitude,
+							  }
+							: undefined
+					}
+					disabled={loading}
+				/>
 			</div>
 
 			{/* Medical Information */}
