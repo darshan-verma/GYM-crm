@@ -1,5 +1,8 @@
 "use client";
 
+/* global google */
+// Google Maps API is loaded dynamically by @react-google-maps/api
+
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -406,17 +409,17 @@ export default function LocationPicker({
 					{isLegacyError ? (
 						<div className="text-xs space-y-2">
 							<div className="font-semibold">Legacy Places API Not Enabled</div>
-							<div>You need to enable the <strong>legacy Places API</strong> (not just "Places API (New)"):</div>
+							<div>You need to enable the <strong>legacy Places API</strong> (not just &quot;Places API (New)&quot;):</div>
 							<ol className="list-decimal list-inside mt-1 space-y-1 ml-2">
-								<li>Go to Google Cloud Console → APIs & Services → Library</li>
-								<li>Search for "Places API" (without "New")</li>
+								<li>Go to Google Cloud Console → APIs &amp; Services → Library</li>
+								<li>Search for &quot;Places API&quot; (without &quot;New&quot;)</li>
 								<li>Enable the <strong>legacy Places API</strong></li>
 								<li>Go to Credentials → Your API Key → API restrictions</li>
-								<li>Add "Places API" to the allowed APIs list</li>
+								<li>Add &quot;Places API&quot; to the allowed APIs list</li>
 								<li>Wait 5-10 minutes, then restart your dev server</li>
 							</ol>
 							<div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
-								<strong>Note:</strong> Both "Places API" (legacy) and "Places API (New)" can be enabled at the same time. The Autocomplete widget requires the legacy version.
+								<strong>Note:</strong> Both &quot;Places API&quot; (legacy) and &quot;Places API (New)&quot; can be enabled at the same time. The Autocomplete widget requires the legacy version.
 							</div>
 						</div>
 					) : (
