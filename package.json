@@ -8,6 +8,7 @@
 		"start": "next start",
 		"lint": "eslint . --max-warnings=0",
 		"postinstall": "prisma generate",
+		"migrate:prod": "prisma migrate deploy",
 		"db:push": "prisma db push",
 		"db:studio": "prisma studio",
 		"db:seed": "tsx prisma/seed.ts"

@@ -197,17 +197,17 @@ export default function Sidebar({
 					<div className="p-4 border-t">
 						<div className="flex items-center gap-3 mb-3">
 							<Avatar>
-								<AvatarImage src={user.image || undefined} />
+								<AvatarImage src={user?.image || undefined} />
 								<AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-700 text-white">
-									{(user.name || user.email || "U").charAt(0).toUpperCase()}
+									{(user?.name || user?.email || "U").charAt(0).toUpperCase()}
 								</AvatarFallback>
 							</Avatar>
 							<div className="flex-1 min-w-0">
 								<p className="text-sm font-medium truncate">
-									{user.name || user.email || "User"}
+									{user?.name || user?.email || "User"}
 								</p>
 								<p className="text-xs text-muted-foreground truncate">
-									{user.email}
+									{user?.email || ""}
 								</p>
 							</div>
 						</div>

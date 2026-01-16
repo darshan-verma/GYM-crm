@@ -20,7 +20,7 @@ import { User, Bell, Shield, Palette } from "lucide-react";
 export default async function SettingsPage() {
 	const session = await auth();
 
-	if (!session) {
+	if (!session || !session.user) {
 		redirect("/login");
 	}
 
@@ -72,9 +72,9 @@ export default async function SettingsPage() {
 							{/* Avatar */}
 							<div className="flex items-center gap-4">
 								<Avatar className="h-20 w-20">
-									<AvatarImage src={session.user.image || undefined} />
+									<AvatarImage src={session.user?.image || undefined} />
 									<AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-700 text-white text-2xl">
-										{session.user.name?.charAt(0)}
+										{session.user?.name?.charAt(0) || "U"}
 									</AvatarFallback>
 								</Avatar>
 								<div>
@@ -93,7 +93,7 @@ export default async function SettingsPage() {
 							<div className="grid gap-4 md:grid-cols-2">
 								<div className="space-y-2">
 									<Label htmlFor="name">Full Name</Label>
-									<Input id="name" defaultValue={session.user.name || ""} />
+									<Input id="name" defaultValue={session.user?.name || ""} />
 								</div>
 
 								<div className="space-y-2">
@@ -101,7 +101,7 @@ export default async function SettingsPage() {
 									<Input
 										id="email"
 										type="email"
-										defaultValue={session.user.email || ""}
+										defaultValue={session.user?.email || ""}
 									/>
 								</div>
 
@@ -114,7 +114,7 @@ export default async function SettingsPage() {
 									<Label htmlFor="role">Role</Label>
 									<Input
 										id="role"
-										value={session.user.role}
+										value={session.user?.role || ""}
 										disabled
 										className="bg-muted"
 									/>
