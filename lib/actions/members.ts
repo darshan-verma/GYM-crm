@@ -1,8 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
+import { put } from "@vercel/blob";
 import prisma from "@/lib/db/prisma";
 import { auth } from "@/lib/auth";
 import { MembershipStatus } from "@prisma/client";
@@ -16,45 +15,53 @@ export async function createMember(formData: FormData) {
 		const longitudeStr = formData.get("longitude") as string;
 		const formattedAddress = (formData.get("formattedAddress") as string) || null;
 
+		// Helper to convert empty strings to null
+		const getValue = (value: string | null | undefined): string | null => {
+			if (!value || value.trim() === "" || value === "none") return null;
+			return value;
+		};
+
 		const data = {
 			name: formData.get("name") as string,
-			email: (formData.get("email") as string) || null,
+			email: getValue(formData.get("email") as string),
 			phone: formData.get("phone") as string,
-			address: (formData.get("address") as string) || null,
-			city: (formData.get("city") as string) || null,
-			state: (formData.get("state") as string) || null,
-			pincode: (formData.get("pincode") as string) || null,
+			address: getValue(formData.get("address") as string),
+			city: getValue(formData.get("city") as string),
+			state: getValue(formData.get("state") as string),
+			pincode: getValue(formData.get("pincode") as string),
 			latitude: latitudeStr ? parseFloat(latitudeStr) : null,
 			longitude: longitudeStr ? parseFloat(longitudeStr) : null,
-			formattedAddress: formattedAddress,
+			formattedAddress: getValue(formattedAddress),
 			dateOfBirth: formData.get("dateOfBirth") as string,
-			gender: (formData.get("gender") as string) || null,
-			emergencyContact: (formData.get("emergencyContact") as string) || null,
-			emergencyName: (formData.get("emergencyName") as string) || null,
-			bloodGroup: (formData.get("bloodGroup") as string) || null,
-			medicalConditions: (formData.get("medicalConditions") as string) || null,
-			trainerId: (formData.get("trainerId") as string) || null,
-			notes: (formData.get("notes") as string) || null,
+			gender: getValue(formData.get("gender") as string),
+			emergencyContact: getValue(formData.get("emergencyContact") as string),
+			emergencyName: getValue(formData.get("emergencyName") as string),
+			bloodGroup: getValue(formData.get("bloodGroup") as string),
+			medicalConditions: getValue(formData.get("medicalConditions") as string),
+			trainerId: getValue(formData.get("trainerId") as string),
+			notes: getValue(formData.get("notes") as string),
 		};
 
 		const membershipPlanId =
 			(formData.get("membershipPlanId") as string) || null;
 
-		// Handle photo upload
+		// Handle photo upload using Vercel Blob Storage
 		let photoPath = null;
 		const photo = formData.get("photo") as File;
 		if (photo && photo.size > 0) {
-			const bytes = await photo.arrayBuffer();
-			const buffer = Buffer.from(bytes);
-
-			// Create upload directory if it doesn't exist
-			const uploadDir = path.join(process.cwd(), "public/uploads/members");
-			await mkdir(uploadDir, { recursive: true });
-
-			const filename = `${Date.now()}-${photo.name.replace(/\s/g, "-")}`;
-			const filepath = path.join(uploadDir, filename);
-			await writeFile(filepath, buffer);
-			photoPath = `/uploads/members/${filename}`;
+			try {
+				// Upload to Vercel Blob Storage
+				const filename = `members/${Date.now()}-${photo.name.replace(/\s/g, "-")}`;
+				const blob = await put(filename, photo, {
+					access: "public",
+					contentType: photo.type,
+				});
+				photoPath = blob.url;
+			} catch (uploadError) {
+				// Silently fail photo upload - member creation should still succeed
+				console.warn("Photo upload failed:", uploadError);
+				photoPath = null;
+			}
 		}
 
 		// Generate membership number
@@ -108,26 +115,36 @@ export async function createMember(formData: FormData) {
 			}
 		}
 
-		// Log activity
-		await prisma.activityLog.create({
-			data: {
-				userId: session.user.id,
-				action: "CREATE",
-				entity: "Member",
-				entityId: member.id,
-				details: {
-					membershipNumber,
-					name: member.name,
-					membershipCreated: !!membershipPlanId,
+		// Log activity (don't fail if logging fails)
+		try {
+			await prisma.activityLog.create({
+				data: {
+					userId: session.user.id,
+					action: "CREATE",
+					entity: "Member",
+					entityId: member.id,
+					details: {
+						membershipNumber,
+						name: member.name,
+						membershipCreated: !!membershipPlanId,
+					},
 				},
-			},
-		});
+			});
+		} catch (logError) {
+			console.warn("Failed to create activity log:", logError);
+			// Don't fail member creation if logging fails
+		}
 
 		revalidatePath("/members");
 		return { success: true, data: member };
 	} catch (error) {
 		console.error("Create member error:", error);
-		return { success: false, error: "Failed to create member" };
+		// Provide more detailed error message
+		const errorMessage = error instanceof Error ? error.message : "Unknown error";
+		return { 
+			success: false, 
+			error: `Failed to create member: ${errorMessage}` 
+		};
 	}
 }
 
@@ -254,20 +271,22 @@ export async function updateMember(id: string, formData: FormData) {
 		const membershipPlanId =
 			(formData.get("membershipPlanId") as string) || null;
 
-		// Handle photo upload
+		// Handle photo upload using Vercel Blob Storage
 		const photo = formData.get("photo") as File;
 		if (photo && photo.size > 0) {
-			const bytes = await photo.arrayBuffer();
-			const buffer = Buffer.from(bytes);
-
-			// Create upload directory if it doesn't exist
-			const uploadDir = path.join(process.cwd(), "public/uploads/members");
-			await mkdir(uploadDir, { recursive: true });
-
-			const filename = `${Date.now()}-${photo.name.replace(/\s/g, "-")}`;
-			const filepath = path.join(uploadDir, filename);
-			await writeFile(filepath, buffer);
-			data.photo = `/uploads/members/${filename}`;
+			try {
+				// Upload to Vercel Blob Storage
+				const filename = `members/${Date.now()}-${photo.name.replace(/\s/g, "-")}`;
+				const blob = await put(filename, photo, {
+					access: "public",
+					contentType: photo.type,
+				});
+				data.photo = blob.url;
+			} catch (uploadError) {
+				// Silently fail photo upload - member update should still succeed
+				console.warn("Photo upload failed:", uploadError);
+				// Don't update photo if upload fails
+			}
 		}
 
 		// Get current active membership
