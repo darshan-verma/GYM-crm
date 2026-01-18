@@ -28,6 +28,7 @@ interface PaymentWithMember {
 	gstNumber: string | null;
 	gstPercentage: number | null;
 	gstAmount: number | null;
+	discount: number | null;
 	createdBy: string | null;
 	createdAt: Date;
 	member: {
@@ -265,68 +266,95 @@ export default async function InvoiceDetailPage({
 							</tr>
 						</thead>
 						<tbody className="divide-y">
-							{payment.gstAmount && payment.gstAmount > 0 ? (
-								<>
-									<tr>
-										<td className="py-4 px-4">
-											<div>
-												<p className="font-medium">
-													Membership Payment (Subtotal)
-												</p>
-												{payment.notes && (
-													<p className="text-sm text-gray-600 mt-1">
+							{(() => {
+								// Rule 7: Invoice Generation - Clear breakdown
+								const finalPayable = Number(payment.amount); // Total payment received
+								const discountAmount = Number(payment.discount || 0);
+								const gstAmount = Number(payment.gstAmount || 0);
+								const taxableAmount = finalPayable - gstAmount; // Taxable = Final - GST
+								const baseAmount = taxableAmount + discountAmount; // Base = Taxable + Discount
+
+								return (
+									<>
+										<tr>
+											<td className="py-4 px-4">
+												<div>
+													<p className="font-medium">Base Amount</p>
+												</div>
+											</td>
+											<td className="py-4 px-4 text-right font-medium">
+												{formatCurrency(baseAmount)}
+											</td>
+										</tr>
+										{discountAmount > 0 && (
+											<tr>
+												<td className="py-4 px-4">
+													<div>
+														<p className="font-medium text-green-600">Discount</p>
+													</div>
+												</td>
+												<td className="py-4 px-4 text-right font-medium text-green-600">
+													-{formatCurrency(discountAmount)}
+												</td>
+											</tr>
+										)}
+										{discountAmount > 0 && (
+											<tr>
+												<td className="py-4 px-4">
+													<div>
+														<p className="font-medium">Taxable Value</p>
+													</div>
+												</td>
+												<td className="py-4 px-4 text-right font-medium">
+													{formatCurrency(taxableAmount)}
+												</td>
+											</tr>
+										)}
+										{gstAmount > 0 && (
+											<tr>
+												<td className="py-4 px-4">
+													<div>
+														<p className="font-medium">
+															GST ({payment.gstPercentage}%)
+														</p>
+													</div>
+												</td>
+												<td className="py-4 px-4 text-right font-medium">
+													{formatCurrency(gstAmount)}
+												</td>
+											</tr>
+										)}
+										{payment.notes && (
+											<tr>
+												<td colSpan={2} className="py-2 px-4">
+													<p className="text-sm text-gray-600">
 														{payment.notes}
 													</p>
-												)}
-											</div>
-										</td>
-										<td className="py-4 px-4 text-right font-medium">
-											{formatCurrency(
-												Number(payment.amount) - Number(payment.gstAmount)
-											)}
-										</td>
-									</tr>
-									<tr>
-										<td className="py-4 px-4">
-											<div>
-												<p className="font-medium">
-													GST Amount ({payment.gstPercentage}%)
-												</p>
-											</div>
-										</td>
-										<td className="py-4 px-4 text-right font-medium">
-											{formatCurrency(Number(payment.gstAmount))}
-										</td>
-									</tr>
-								</>
-							) : (
-								<tr>
-									<td className="py-4 px-4">
-										<div>
-											<p className="font-medium">Membership Payment</p>
-											{payment.notes && (
-												<p className="text-sm text-gray-600 mt-1">
-													{payment.notes}
-												</p>
-											)}
-										</div>
-									</td>
-									<td className="py-4 px-4 text-right font-medium">
-										{formatCurrency(Number(payment.amount))}
-									</td>
-								</tr>
-							)}
+												</td>
+											</tr>
+										)}
+									</>
+								);
+							})()}
 						</tbody>
-						<tfoot className="border-t-2 border-gray-900">
-							<tr>
-								<td className="py-4 px-4 text-right font-semibold text-lg">
-									Total Paid:
-								</td>
-								<td className="py-4 px-4 text-right font-bold text-2xl text-green-600">
-									{formatCurrency(Number(payment.amount))}
-								</td>
-							</tr>
-						</tfoot>
+					<tfoot className="border-t-2 border-gray-900">
+						<tr>
+							<td className="py-4 px-4 text-right font-semibold text-lg">
+								Final Payable:
+							</td>
+							<td className="py-4 px-4 text-right font-bold text-2xl text-green-600">
+								{formatCurrency(Number(payment.amount))}
+							</td>
+						</tr>
+						<tr>
+							<td className="py-4 px-4 text-right font-semibold text-lg">
+								Payment Received:
+							</td>
+							<td className="py-4 px-4 text-right font-bold text-2xl text-green-600">
+								{formatCurrency(Number(payment.amount))}
+							</td>
+						</tr>
+					</tfoot>
 					</table>
 				</div>
 

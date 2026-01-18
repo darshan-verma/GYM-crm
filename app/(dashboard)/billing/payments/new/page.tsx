@@ -5,14 +5,22 @@ import Link from "next/link";
 import PaymentForm from "@/components/forms/PaymentForm";
 import prisma from "@/lib/db/prisma";
 
-export default async function NewPaymentPage() {
-	// Get members with all their memberships for payment form
+export default async function NewPaymentPage({
+	searchParams,
+}: {
+	searchParams?: Promise<{ memberId?: string }>;
+}) {
+	// Await searchParams as it's a Promise in Next.js
+	const params = await searchParams;
+	
+	// Get members with all their memberships and payments for payment form
 	const members = await prisma.member.findMany({
 		include: {
 			memberships: {
 				include: { plan: true },
 				orderBy: { createdAt: "desc" },
 			},
+			payments: true,
 		},
 		orderBy: { name: "asc" },
 	});
@@ -43,7 +51,10 @@ export default async function NewPaymentPage() {
 					<CardTitle>Payment Details</CardTitle>
 				</CardHeader>
 				<CardContent>
-					<PaymentForm members={serializedMembers} />
+					<PaymentForm
+						members={serializedMembers}
+						initialMemberId={params?.memberId}
+					/>
 				</CardContent>
 			</Card>
 		</div>

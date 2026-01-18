@@ -44,13 +44,19 @@ export async function GET(
 			memberName: payment.member.name,
 			memberEmail: payment.member.email || undefined,
 			memberPhone: payment.member.phone,
-			amount: parseFloat(payment.amount.toString()),
+			amount: parseFloat(payment.amount.toString()), // Total payment including GST
 			paymentMode: payment.paymentMode,
 			transactionId: payment.transactionId || undefined,
 			planName: membership?.plan.name,
 			planDuration: membership ? `${membership.plan.duration} days` : undefined,
 			startDate: membership?.startDate,
 			endDate: membership?.endDate,
+			discount: payment.discount
+				? parseFloat(payment.discount.toString())
+				: undefined,
+			membershipBaseAmount: membership
+				? parseFloat(membership.finalAmount.toString())
+				: undefined,
 			notes: payment.notes || undefined,
 			gstNumber: payment.gstNumber || undefined,
 			gstPercentage: payment.gstPercentage

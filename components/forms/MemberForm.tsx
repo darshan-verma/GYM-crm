@@ -57,6 +57,11 @@ interface MemberFormProps {
 	}>;
 	initialData?: Member;
 	isEdit?: boolean;
+	leadData?: {
+		name?: string;
+		phone?: string;
+		email?: string;
+	};
 }
 
 export default function MemberForm({
@@ -64,6 +69,7 @@ export default function MemberForm({
 	membershipPlans = [],
 	initialData,
 	isEdit = false,
+	leadData,
 }: MemberFormProps) {
 	const router = useRouter();
 	const [loading, setLoading] = useState(false);
@@ -195,7 +201,7 @@ export default function MemberForm({
 					<Input
 						id="name"
 						name="name"
-						defaultValue={initialData?.name}
+						defaultValue={initialData?.name || leadData?.name}
 						required
 						disabled={loading}
 						placeholder="John Doe"
@@ -208,7 +214,7 @@ export default function MemberForm({
 						id="phone"
 						name="phone"
 						type="tel"
-						defaultValue={initialData?.phone}
+						defaultValue={initialData?.phone || leadData?.phone}
 						required
 						disabled={loading}
 						placeholder="+91 9876543210"
@@ -221,7 +227,7 @@ export default function MemberForm({
 						id="email"
 						name="email"
 						type="email"
-						defaultValue={initialData?.email}
+						defaultValue={initialData?.email || leadData?.email}
 						disabled={loading}
 						placeholder="john@example.com"
 					/>

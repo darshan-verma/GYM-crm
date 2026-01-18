@@ -167,16 +167,16 @@ export default function LeadForm({
 					/>
 				</div>
 
-				{/* Follow Up Date */}
+				{/* Follow Up Date & Time */}
 				<div className="space-y-2">
-					<Label htmlFor="followUpDate">Follow Up Date (Optional)</Label>
+					<Label htmlFor="followUpDate">Follow Up Date & Time (Optional)</Label>
 					<Input
 						id="followUpDate"
 						name="followUpDate"
-						type="date"
+						type="datetime-local"
 						defaultValue={
 							initialData?.followUpDate
-								? new Date(initialData.followUpDate).toISOString().split("T")[0]
+								? new Date(initialData.followUpDate).toISOString().slice(0, 16)
 								: ""
 						}
 						disabled={loading}

@@ -10,9 +10,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Edit, Phone, Mail, Calendar, User, ArrowLeft } from "lucide-react";
+import { Edit, Phone, Mail, Calendar, ArrowLeft, User } from "lucide-react";
 import Link from "next/link";
-import { formatDate, formatPhoneNumber } from "@/lib/utils/format";
+import { formatDate, formatDateTime, formatPhoneNumber } from "@/lib/utils/format";
+import ConvertLeadButton from "@/components/leads/ConvertLeadButton";
 
 const statusColors = {
 	NEW: "bg-blue-100 text-blue-800 border-blue-200",
@@ -133,10 +134,10 @@ export default async function LeadDetailPage({
 									<Calendar className="w-4 h-4 text-muted-foreground" />
 									<div>
 										<p className="text-sm text-muted-foreground">
-											Follow-up Date
+											Follow-up Date & Time
 										</p>
 										<p className="font-medium">
-											{formatDate(lead.followUpDate)}
+											{formatDateTime(lead.followUpDate)}
 										</p>
 									</div>
 								</div>
@@ -168,12 +169,7 @@ export default async function LeadDetailPage({
 						)}
 
 						{lead.status !== "CONVERTED" && (
-							<Button variant="outline" className="w-full" asChild>
-								<Link href={`/members/new?leadId=${lead.id}`}>
-									<User className="w-4 h-4 mr-2" />
-									Convert to Member
-								</Link>
-							</Button>
+							<ConvertLeadButton leadId={lead.id} leadName={lead.name} />
 						)}
 					</CardContent>
 				</Card>

@@ -71,83 +71,93 @@ export default async function DashboardPage() {
 
 			{/* Stats Grid */}
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-				<Card className="hover:shadow-md transition-shadow">
-					<CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-						<CardTitle className="text-sm font-medium text-muted-foreground">
-							Total Members
-						</CardTitle>
-						<div className="p-2 rounded-lg bg-blue-500/10 text-blue-700">
-							<Users className="w-4 h-4" />
-						</div>
-					</CardHeader>
-					<CardContent>
-						<div className="text-2xl font-bold">{stats.totalMembers}</div>
-					</CardContent>
-				</Card>
+				<Link href="/members">
+					<Card className="hover:shadow-md transition-shadow cursor-pointer">
+						<CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+							<CardTitle className="text-sm font-medium text-muted-foreground">
+								Total Members
+							</CardTitle>
+							<div className="p-2 rounded-lg bg-blue-500/10 text-blue-700">
+								<Users className="w-4 h-4" />
+							</div>
+						</CardHeader>
+						<CardContent>
+							<div className="text-2xl font-bold">{stats.totalMembers}</div>
+						</CardContent>
+					</Card>
+				</Link>
 
-				<Card className="hover:shadow-md transition-shadow">
-					<CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-						<CardTitle className="text-sm font-medium text-muted-foreground">
-							Active Members
-						</CardTitle>
-						<div className="p-2 rounded-lg bg-green-500/10 text-green-700">
-							<UserCheck className="w-4 h-4" />
-						</div>
-					</CardHeader>
-					<CardContent>
-						<div className="text-2xl font-bold">{stats.activeMembers}</div>
-					</CardContent>
-				</Card>
+				<Link href="/members?status=ACTIVE">
+					<Card className="hover:shadow-md transition-shadow cursor-pointer">
+						<CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+							<CardTitle className="text-sm font-medium text-muted-foreground">
+								Active Members
+							</CardTitle>
+							<div className="p-2 rounded-lg bg-green-500/10 text-green-700">
+								<UserCheck className="w-4 h-4" />
+							</div>
+						</CardHeader>
+						<CardContent>
+							<div className="text-2xl font-bold">{stats.activeMembers}</div>
+						</CardContent>
+					</Card>
+				</Link>
 
-				<Card className="hover:shadow-md transition-shadow">
-					<CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-						<CardTitle className="text-sm font-medium text-muted-foreground">
-							Today&apos;s Revenue
-						</CardTitle>
-						<div className="p-2 rounded-lg bg-orange-500/10 text-orange-700">
-							<IndianRupee className="w-4 h-4" />
-						</div>
-					</CardHeader>
-					<CardContent>
-						<div className="text-2xl font-bold">
-							{formatCurrency(stats.todayRevenue)}
-						</div>
-					</CardContent>
-				</Card>
+				<Link href="/billing">
+					<Card className="hover:shadow-md transition-shadow cursor-pointer">
+						<CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+							<CardTitle className="text-sm font-medium text-muted-foreground">
+								Today&apos;s Revenue
+							</CardTitle>
+							<div className="p-2 rounded-lg bg-orange-500/10 text-orange-700">
+								<IndianRupee className="w-4 h-4" />
+							</div>
+						</CardHeader>
+						<CardContent>
+							<div className="text-2xl font-bold">
+								{formatCurrency(stats.todayRevenue)}
+							</div>
+						</CardContent>
+					</Card>
+				</Link>
 
-				<Card className="hover:shadow-md transition-shadow">
-					<CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-						<CardTitle className="text-sm font-medium text-muted-foreground">
-							Today&apos;s Attendance
-						</CardTitle>
-						<div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-700">
-							<Calendar className="w-4 h-4" />
-						</div>
-					</CardHeader>
-					<CardContent>
-						<div className="text-2xl font-bold">{stats.todayAttendance}</div>
-						<p className="text-xs text-muted-foreground mt-1">
-							Members checked in
-						</p>
-					</CardContent>
-				</Card>
+				<Link href="/attendance">
+					<Card className="hover:shadow-md transition-shadow cursor-pointer">
+						<CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+							<CardTitle className="text-sm font-medium text-muted-foreground">
+								Today&apos;s Attendance
+							</CardTitle>
+							<div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-700">
+								<Calendar className="w-4 h-4" />
+							</div>
+						</CardHeader>
+						<CardContent>
+							<div className="text-2xl font-bold">{stats.todayAttendance}</div>
+							<p className="text-xs text-muted-foreground mt-1">
+								Members checked in
+							</p>
+						</CardContent>
+					</Card>
+				</Link>
 
-				<Card className="hover:shadow-md transition-shadow">
-					<CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-						<CardTitle className="text-sm font-medium text-muted-foreground">
-							Expiring Soon
-						</CardTitle>
-						<div className="p-2 rounded-lg bg-red-500/10 text-red-700">
-							<AlertCircle className="w-4 h-4" />
-						</div>
-					</CardHeader>
-					<CardContent>
-						<div className="text-2xl font-bold">{stats.expiringThisWeek}</div>
-						<p className="text-xs text-muted-foreground mt-1">
-							Memberships this week
-						</p>
-					</CardContent>
-				</Card>
+				<Link href="/memberships">
+					<Card className="hover:shadow-md transition-shadow cursor-pointer">
+						<CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+							<CardTitle className="text-sm font-medium text-muted-foreground">
+								Expiring Soon
+							</CardTitle>
+							<div className="p-2 rounded-lg bg-red-500/10 text-red-700">
+								<AlertCircle className="w-4 h-4" />
+							</div>
+						</CardHeader>
+						<CardContent>
+							<div className="text-2xl font-bold">{stats.expiringThisWeek}</div>
+							<p className="text-xs text-muted-foreground mt-1">
+								Memberships this week
+							</p>
+						</CardContent>
+					</Card>
+				</Link>
 			</div>
 
 			{/* Quick Actions */}

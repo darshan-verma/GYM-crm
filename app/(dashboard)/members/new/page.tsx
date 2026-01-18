@@ -1,5 +1,6 @@
 import { getTrainers } from "@/lib/actions/members";
 import { getMembershipPlans } from "@/lib/actions/memberships";
+import { getLeadById } from "@/lib/actions/leads";
 import MemberForm from "@/components/forms/MemberForm";
 import {
 	Card,
@@ -12,10 +13,18 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
-export default async function NewMemberPage() {
-	const [trainers, membershipPlans] = await Promise.all([
+export default async function NewMemberPage({
+	searchParams,
+}: {
+	searchParams: Promise<{ leadId?: string }>;
+}) {
+	const params = await searchParams;
+	const leadId = params?.leadId;
+
+	const [trainers, membershipPlans, lead] = await Promise.all([
 		getTrainers(),
 		getMembershipPlans(),
+		leadId ? getLeadById(leadId) : null,
 	]);
 
 	return (
@@ -43,7 +52,19 @@ export default async function NewMemberPage() {
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<MemberForm trainers={trainers} membershipPlans={membershipPlans} />
+					<MemberForm
+						trainers={trainers}
+						membershipPlans={membershipPlans}
+						leadData={
+							lead
+								? {
+										name: lead.name,
+										phone: lead.phone,
+										email: lead.email || undefined,
+								  }
+								: undefined
+						}
+					/>
 				</CardContent>
 			</Card>
 		</div>

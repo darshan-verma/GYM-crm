@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { updateLeadStatus } from '@/lib/actions/leads'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -8,8 +9,9 @@ import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { Lead, LeadStatus } from '@prisma/client'
 import { Phone, Mail, Calendar } from 'lucide-react'
-import { formatDate } from '@/lib/utils/format'
+import { formatDateTime } from '@/lib/utils/format'
 import Link from 'next/link'
+import ConvertLeadDialog from './ConvertLeadDialog'
 
 interface LeadsPipelineProps {
   leadsByStatus: Record<LeadStatus, Lead[]>
@@ -24,17 +26,33 @@ const columns: { status: LeadStatus; title: string; color: string }[] = [
 ]
 
 export default function LeadsPipeline({ leadsByStatus }: LeadsPipelineProps) {
+  const router = useRouter()
   const [draggedLead, setDraggedLead] = useState<string | null>(null)
+  const [convertDialogOpen, setConvertDialogOpen] = useState(false)
+  const [leadToConvert, setLeadToConvert] = useState<{ id: string; name: string } | null>(null)
 
   async function handleDrop(status: LeadStatus) {
     if (!draggedLead) return
 
+    // If dropping to CONVERTED, show confirmation dialog
+    if (status === 'CONVERTED') {
+      const lead = Object.values(leadsByStatus).flat().find(l => l.id === draggedLead)
+      if (lead) {
+        setLeadToConvert({ id: lead.id, name: lead.name })
+        setConvertDialogOpen(true)
+        setDraggedLead(null)
+        return
+      }
+    }
+
+    // For other statuses, update directly
     const result = await updateLeadStatus(draggedLead, status)
 
     if (result.success) {
       toast.success('Lead Updated', {
         description: `Lead moved to ${status}`,
       })
+      router.refresh()
     } else {
       toast.error('Error', {
         description: result.error,
@@ -45,6 +63,7 @@ export default function LeadsPipeline({ leadsByStatus }: LeadsPipelineProps) {
   }
 
   return (
+    <>
     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
       {columns.map((column) => {
         const leads = leadsByStatus[column.status] || []
@@ -106,7 +125,7 @@ export default function LeadsPipeline({ leadsByStatus }: LeadsPipelineProps) {
                         {lead.followUpDate && (
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
                             <Calendar className="w-3 h-3" />
-                            Follow-up: {formatDate(lead.followUpDate)}
+                            Follow-up: {formatDateTime(lead.followUpDate)}
                           </div>
                         )}
 
@@ -139,5 +158,19 @@ export default function LeadsPipeline({ leadsByStatus }: LeadsPipelineProps) {
         )
       })}
     </div>
+    {leadToConvert && (
+      <ConvertLeadDialog
+        leadId={leadToConvert.id}
+        leadName={leadToConvert.name}
+        open={convertDialogOpen}
+        onOpenChange={(open) => {
+          setConvertDialogOpen(open)
+          if (!open) {
+            setLeadToConvert(null)
+          }
+        }}
+      />
+    )}
+    </>
   )
 }

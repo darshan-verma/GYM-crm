@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { formatCurrency } from "@/lib/utils/format";
 
 interface PaymentFormProps {
 	members: Array<{
@@ -27,28 +28,78 @@ interface PaymentFormProps {
 			plan: { name: string };
 			endDate: Date;
 			active: boolean;
+			finalAmount: number;
+		}>;
+		payments?: Array<{
+			amount: number;
+			discount?: number | null;
+			gstAmount?: number | null;
 		}>;
 	}>;
+	initialMemberId?: string;
 }
 
-export default function PaymentForm({ members }: PaymentFormProps) {
+export default function PaymentForm({
+	members,
+	initialMemberId,
+}: PaymentFormProps) {
 	const router = useRouter();
 	const [loading, setLoading] = useState(false);
-	const [selectedMember, setSelectedMember] = useState<string>("");
+	const [selectedMember, setSelectedMember] = useState<string>(
+		initialMemberId || ""
+	);
 	const [amount, setAmount] = useState<string>("");
+	const [discount, setDiscount] = useState<string>("");
 	const [gstPercentage, setGstPercentage] = useState<string>("");
 
 	const baseAmount = parseFloat(amount) || 0;
+	const discountAmount = parseFloat(discount) || 0;
+	const amountAfterDiscount = Math.max(0, baseAmount - discountAmount);
 	const gstRate = parseFloat(gstPercentage) || 0;
 	const gstAmount =
-		baseAmount > 0 && gstRate > 0 ? (baseAmount * gstRate) / 100 : 0;
-	const totalAmount = baseAmount + gstAmount;
+		amountAfterDiscount > 0 && gstRate > 0
+			? (amountAfterDiscount * gstRate) / 100
+			: 0;
+	const totalAmount = amountAfterDiscount + gstAmount;
 
 	async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
 		e.preventDefault();
 		setLoading(true);
 
 		const formData = new FormData(e.currentTarget);
+		
+		// Validate discount and payment against remaining base due
+		if (remainingBaseDue !== null) {
+			const base = parseFloat(formData.get("amount") as string) || 0;
+			const disc = parseFloat(formData.get("discount") as string) || 0;
+			const afterDiscount = Math.max(0, base - disc);
+			
+			// Rule 2: Discount validation (human-friendly errors)
+			if (disc < 0) {
+				toast.error("Discount cannot be negative");
+				setLoading(false);
+				return;
+			}
+			
+			if (disc > remainingBaseDue) {
+				toast.error(
+					`Discount cannot exceed remaining base fee of ₹${remainingBaseDue.toFixed(2)}`
+				);
+				setLoading(false);
+				return;
+			}
+			
+			// Rule 6: Validate settlement (never compare GST with Due)
+			// payment_ex_gst <= base_due - discount
+			if (afterDiscount + disc > remainingBaseDue) {
+				toast.error(
+					`Payment amount (₹${afterDiscount.toFixed(2)}) plus discount (₹${disc.toFixed(2)}) exceeds remaining base fee (₹${remainingBaseDue.toFixed(2)})`
+				);
+				setLoading(false);
+				return;
+			}
+		}
+		
 		const data = {
 			memberId: formData.get("memberId") as string,
 			amount: parseFloat(formData.get("amount") as string),
@@ -63,6 +114,9 @@ export default function PaymentForm({ members }: PaymentFormProps) {
 			gstNumber: (formData.get("gstNumber") as string) || undefined,
 			gstPercentage: formData.get("gstPercentage")
 				? parseFloat(formData.get("gstPercentage") as string)
+				: undefined,
+			discount: formData.get("discount")
+				? parseFloat(formData.get("discount") as string)
 				: undefined,
 		};
 
@@ -84,9 +138,34 @@ export default function PaymentForm({ members }: PaymentFormProps) {
 	}
 
 	const selectedMemberData = members.find((m) => m.id === selectedMember);
-	const _activeMembership = selectedMemberData?.memberships.find(
+	const activeMembership = selectedMemberData?.memberships.find(
 		(m) => m.active
 	);
+
+	// Calculate remaining balance (base amounts only, excluding GST)
+	const baseDue = activeMembership ? Number(activeMembership.finalAmount) : 0;
+	
+	const totalDiscounts =
+		selectedMemberData?.payments?.reduce(
+			(sum, p) => sum + Number(p.discount || 0),
+			0
+		) || 0;
+	
+	// Calculate payments excluding GST (GST doesn't reduce base due)
+	const totalPaymentsExcludingGST =
+		selectedMemberData?.payments?.reduce(
+			(sum, p) => {
+				const paymentAmount = Number(p.amount);
+				const gstAmount = Number(p.gstAmount || 0);
+				return sum + (paymentAmount - gstAmount);
+			},
+			0
+		) || 0;
+	
+	// Remaining base due = Base Due - Discounts - Payments (excluding GST)
+	const remainingBaseDue = activeMembership
+		? baseDue - totalDiscounts - totalPaymentsExcludingGST
+		: null;
 
 	return (
 		<form onSubmit={handleSubmit} className="space-y-6">
@@ -146,9 +225,102 @@ export default function PaymentForm({ members }: PaymentFormProps) {
 						min="0"
 						placeholder="0.00"
 						value={amount}
-						onChange={(e) => setAmount(e.target.value)}
+						onChange={(e) => {
+							const value = e.target.value;
+							setAmount(value);
+							
+							// Validate against remaining base due (excluding GST)
+							if (remainingBaseDue !== null && value) {
+								const base = parseFloat(value) || 0;
+								const disc = parseFloat(discount) || 0;
+								const afterDiscount = Math.max(0, base - disc);
+								
+								// Validate discount
+								if (disc > remainingBaseDue) {
+									toast.error(
+										`Discount cannot exceed remaining base due of ${formatCurrency(remainingBaseDue)}`
+									);
+									return;
+								}
+								
+								// Validate settlement
+								if (afterDiscount + disc > remainingBaseDue) {
+									toast.error(
+										`Settlement (Base: ₹${afterDiscount.toFixed(2)} + Discount: ₹${disc.toFixed(2)}) exceeds remaining base due of ${formatCurrency(remainingBaseDue)}`
+									);
+									return;
+								}
+							}
+						}}
 						disabled={loading}
 						required
+					/>
+					{remainingBaseDue !== null && (
+						<div className="text-xs text-muted-foreground space-y-1">
+							<p>
+								Remaining base due:{" "}
+								<span
+									className={
+										remainingBaseDue > 0 ? "font-semibold text-orange-600" : "font-semibold text-green-600"
+									}
+								>
+									{remainingBaseDue > 0 ? formatCurrency(remainingBaseDue) : "No Dues"}
+								</span>
+							</p>
+							{totalDiscounts > 0 && (
+								<p>
+									Total discounts given:{" "}
+									<span className="font-semibold text-blue-600">
+										{formatCurrency(totalDiscounts)}
+									</span>
+								</p>
+							)}
+							<p className="text-xs italic text-muted-foreground">
+								Golden Formula: Discount reduces Base → GST applies after Discount → Payment settles Taxable + GST
+							</p>
+						</div>
+					)}
+				</div>
+
+				{/* Discount */}
+				<div className="space-y-2">
+					<Label htmlFor="discount">Discount (Optional)</Label>
+					<Input
+						id="discount"
+						name="discount"
+						type="number"
+						step="0.01"
+						min="0"
+						max={remainingBaseDue !== null ? remainingBaseDue : undefined}
+						placeholder="0.00"
+						value={discount}
+						onChange={(e) => {
+							const value = e.target.value;
+							setDiscount(value);
+							
+							// Validate discount doesn't exceed remaining base due
+							if (remainingBaseDue !== null && value) {
+								const disc = parseFloat(value) || 0;
+								const base = parseFloat(amount) || 0;
+								const afterDiscount = Math.max(0, base - disc);
+								
+								if (disc > remainingBaseDue) {
+									toast.error(
+										`Discount cannot exceed remaining base due of ${formatCurrency(remainingBaseDue)}`
+									);
+									return;
+								}
+								
+								// Validate total settlement
+								if (afterDiscount + disc > remainingBaseDue) {
+									toast.error(
+										`Settlement (Base: ₹${afterDiscount.toFixed(2)} + Discount: ₹${disc.toFixed(2)}) exceeds remaining base due of ${formatCurrency(remainingBaseDue)}`
+									);
+									return;
+								}
+							}
+						}}
+						disabled={loading}
 					/>
 				</div>
 
@@ -198,23 +370,45 @@ export default function PaymentForm({ members }: PaymentFormProps) {
 					/>
 				</div>
 
-				{/* GST Calculation Display */}
-				{gstAmount > 0 && (
+				{/* Price Breakdown */}
+				{(discountAmount > 0 || gstAmount > 0) && (
 					<div className="space-y-2 p-4 bg-gray-50 rounded-lg col-span-2">
-						<h4 className="font-medium text-sm">GST Calculation</h4>
+						<h4 className="font-medium text-sm">Price Breakdown</h4>
 						<div className="space-y-1 text-sm">
 							<div className="flex justify-between">
 								<span>Base Amount:</span>
 								<span>₹{baseAmount.toFixed(2)}</span>
 							</div>
-							<div className="flex justify-between">
-								<span>GST ({gstRate}%):</span>
-								<span>₹{gstAmount.toFixed(2)}</span>
-							</div>
+							{discountAmount > 0 && (
+								<div className="flex justify-between text-green-600">
+									<span>Discount:</span>
+									<span>-₹{discountAmount.toFixed(2)}</span>
+								</div>
+							)}
+							{discountAmount > 0 && (
+								<div className="flex justify-between text-muted-foreground">
+									<span>Base After Discount:</span>
+									<span>₹{amountAfterDiscount.toFixed(2)}</span>
+								</div>
+							)}
+							{gstAmount > 0 && (
+								<div className="flex justify-between">
+									<span>GST ({gstRate}% on base after discount):</span>
+									<span>₹{gstAmount.toFixed(2)}</span>
+								</div>
+							)}
 							<div className="flex justify-between font-semibold border-t pt-1">
-								<span>Total Amount:</span>
+								<span>Final Payable:</span>
 								<span>₹{totalAmount.toFixed(2)}</span>
 							</div>
+							{remainingBaseDue !== null && (
+								<div className="flex justify-between text-xs text-muted-foreground pt-1 border-t">
+									<span>Remaining base due after this payment:</span>
+									<span className={remainingBaseDue - amountAfterDiscount - discountAmount > 0 ? "text-orange-600" : "text-green-600"}>
+										₹{Math.max(0, (remainingBaseDue - amountAfterDiscount - discountAmount)).toFixed(2)}
+									</span>
+								</div>
+							)}
 						</div>
 					</div>
 				)}

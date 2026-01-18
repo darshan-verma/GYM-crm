@@ -7,7 +7,7 @@ interface InvoiceData {
 	memberName: string;
 	memberEmail?: string;
 	memberPhone: string;
-	amount: number;
+	amount: number; // Total payment amount (including GST)
 	paymentMode: string;
 	transactionId?: string;
 	planName?: string;
@@ -16,6 +16,7 @@ interface InvoiceData {
 	endDate?: Date;
 	discount?: number;
 	notes?: string;
+	membershipBaseAmount?: number; // Base membership amount (ex-GST, before discount)
 	gstNumber?: string;
 	gstPercentage?: number;
 	gstAmount?: number;
@@ -135,19 +136,26 @@ export function generateInvoicePDF(data: InvoiceData) {
 			.finalY + 10;
 
 	const amountDetails: (string | number)[][] = [];
-	const baseAmount = data.discount ? data.amount + data.discount : data.amount;
-
-	if (data.discount) {
-		amountDetails.push(["Membership Amount", `₹${baseAmount.toFixed(2)}`]);
-		amountDetails.push(["Discount", `-₹${data.discount.toFixed(2)}`]);
+	
+	// Rule 7: Invoice Generation - Clear breakdown
+	// Calculate from stored payment data
+	const finalPayable = data.amount; // Total payment received
+	const discountAmount = data.discount || 0;
+	const gstAmount = data.gstAmount || 0;
+	const taxableAmount = finalPayable - gstAmount; // Taxable = Final - GST
+	const baseAmount = taxableAmount + discountAmount; // Base = Taxable + Discount
+	
+	// Show breakdown following Rule 7 format
+	amountDetails.push(["Base Amount", `₹${baseAmount.toFixed(2)}`]);
+	if (discountAmount > 0) {
+		amountDetails.push(["Discount", `-₹${discountAmount.toFixed(2)}`]);
+		amountDetails.push(["Taxable Value", `₹${taxableAmount.toFixed(2)}`]);
 	}
-	// Add GST breakdown if GST is applied
-	if (data.gstAmount && data.gstAmount > 0) {
-		const subtotal = data.amount - data.gstAmount;
-		amountDetails.push(["Subtotal", `₹${subtotal.toFixed(2)}`]);
-		amountDetails.push(["GST Amount", `₹${data.gstAmount.toFixed(2)}`]);
+	if (gstAmount > 0) {
+		amountDetails.push([`GST (${data.gstPercentage}%)`, `₹${gstAmount.toFixed(2)}`]);
 	}
-	amountDetails.push(["Total Amount Paid", `₹${data.amount.toFixed(2)}`]);
+	amountDetails.push(["Final Payable", `₹${finalPayable.toFixed(2)}`]);
+	amountDetails.push(["Payment Received", `₹${finalPayable.toFixed(2)}`]);
 
 	autoTable(doc, {
 		startY: amountTableY,
@@ -324,19 +332,26 @@ export function generateInvoicePDFBlob(data: InvoiceData): Blob {
 		(doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable
 			.finalY + 10;
 	const amountDetails: (string | number)[][] = [];
-	const baseAmount = data.discount ? data.amount + data.discount : data.amount;
-
-	if (data.discount) {
-		amountDetails.push(["Membership Amount", `₹${baseAmount.toFixed(2)}`]);
-		amountDetails.push(["Discount", `-₹${data.discount.toFixed(2)}`]);
+	
+	// Rule 7: Invoice Generation - Clear breakdown
+	// Calculate from stored payment data
+	const finalPayable = data.amount; // Total payment received
+	const discountAmount = data.discount || 0;
+	const gstAmount = data.gstAmount || 0;
+	const taxableAmount = finalPayable - gstAmount; // Taxable = Final - GST
+	const baseAmount = taxableAmount + discountAmount; // Base = Taxable + Discount
+	
+	// Show breakdown following Rule 7 format
+	amountDetails.push(["Base Amount", `₹${baseAmount.toFixed(2)}`]);
+	if (discountAmount > 0) {
+		amountDetails.push(["Discount", `-₹${discountAmount.toFixed(2)}`]);
+		amountDetails.push(["Taxable Value", `₹${taxableAmount.toFixed(2)}`]);
 	}
-	// Add GST breakdown if GST is applied
-	if (data.gstAmount && data.gstAmount > 0) {
-		const subtotal = data.amount - data.gstAmount;
-		amountDetails.push(["Subtotal", `₹${subtotal.toFixed(2)}`]);
-		amountDetails.push(["GST Amount", `₹${data.gstAmount.toFixed(2)}`]);
+	if (gstAmount > 0) {
+		amountDetails.push([`GST (${data.gstPercentage}%)`, `₹${gstAmount.toFixed(2)}`]);
 	}
-	amountDetails.push(["Total Amount Paid", `₹${data.amount.toFixed(2)}`]);
+	amountDetails.push(["Final Payable", `₹${finalPayable.toFixed(2)}`]);
+	amountDetails.push(["Payment Received", `₹${finalPayable.toFixed(2)}`]);
 
 	autoTable(doc, {
 		startY: amountTableY,

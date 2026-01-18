@@ -59,6 +59,36 @@ export default async function MemberDetailPage({
 	// eslint-disable-next-line react-hooks/purity
 	const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
+	// Calculate payment totals and discounts
+	// Base due is the membership finalAmount (ex-GST)
+	const baseDue = activeMembership ? Number(activeMembership.finalAmount) : 0;
+	
+	// Calculate total discounts (reduces base due)
+	const totalDiscounts = member.payments.reduce(
+		(sum, p) => sum + Number(p.discount || 0),
+		0
+	);
+	
+	// Calculate total payments excluding GST (reduces base due)
+	// GST is tax pass-through, doesn't reduce what member owes
+	const totalPaymentsExcludingGST = member.payments.reduce(
+		(sum, p) => {
+			const paymentAmount = Number(p.amount);
+			const gstAmount = Number(p.gstAmount || 0);
+			return sum + (paymentAmount - gstAmount);
+		},
+		0
+	);
+	
+	// Total paid (including GST) - for display only
+	const totalPaid = member.payments.reduce(
+		(sum, p) => sum + Number(p.amount),
+		0
+	);
+	
+	// Remaining base due = Base Due - Discounts - Payments (excluding GST)
+	const remainingBalance = baseDue - totalDiscounts - totalPaymentsExcludingGST;
+
 	return (
 		<div className="space-y-6">
 			{/* Header */}
@@ -267,7 +297,7 @@ export default async function MemberDetailPage({
 								</div>
 							</CardHeader>
 							<CardContent>
-								<div className="grid gap-4 md:grid-cols-2">
+								<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
 									<div>
 										<p className="text-sm text-muted-foreground">Plan</p>
 										<p className="text-lg font-semibold">
@@ -275,9 +305,29 @@ export default async function MemberDetailPage({
 										</p>
 									</div>
 									<div>
-										<p className="text-sm text-muted-foreground">Amount Paid</p>
+										<p className="text-sm text-muted-foreground">Total Amount</p>
 										<p className="text-lg font-semibold">
 											{formatCurrency(Number(activeMembership.finalAmount))}
+										</p>
+									</div>
+									<div>
+										<p className="text-sm text-muted-foreground">Total Paid</p>
+										<p className="text-lg font-semibold text-green-600">
+											{formatCurrency(totalPaid)}
+										</p>
+									</div>
+									{totalDiscounts > 0 && (
+										<div>
+											<p className="text-sm text-muted-foreground">Total Discounts</p>
+											<p className="text-lg font-semibold text-blue-600">
+												{formatCurrency(totalDiscounts)}
+											</p>
+										</div>
+									)}
+									<div>
+										<p className="text-sm text-muted-foreground">Remaining Balance</p>
+										<p className={`text-lg font-semibold ${remainingBalance > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+											{remainingBalance > 0 ? formatCurrency(remainingBalance) : 'No Dues'}
 										</p>
 									</div>
 									<div>

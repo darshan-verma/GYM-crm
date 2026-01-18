@@ -13,6 +13,7 @@ export async function createPayment(data: {
 	membershipId?: string;
 	gstNumber?: string;
 	gstPercentage?: number;
+	discount?: number;
 }) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
@@ -23,7 +24,7 @@ export async function createPayment(data: {
 			data.membershipId && data.membershipId !== "none"
 				? data.membershipId
 				: undefined;
-		// Get member details
+			// Get member details with payments
 		const member = await prisma.member.findUnique({
 			where: { id: data.memberId },
 			include: {
@@ -32,10 +33,67 @@ export async function createPayment(data: {
 					include: { plan: true },
 					take: 1,
 				},
+				payments: true,
 			},
 		});
 
 		if (!member) throw new Error("Member not found");
+
+		// Calculate remaining balance if member has active membership
+		if (member.memberships.length > 0) {
+			const activeMembership = member.memberships[0];
+			const baseDue = Number(activeMembership.finalAmount); // Base amount (ex-GST)
+			
+			// Calculate total discounts and payments (excluding GST) from previous payments
+			const totalDiscounts = member.payments.reduce(
+				(sum, p) => sum + Number((p as { discount?: unknown }).discount || 0),
+				0
+			);
+			const totalPaymentsExcludingGST = member.payments.reduce(
+				(sum, p) => {
+					const paymentAmount = Number(p.amount);
+					const gstAmount = Number((p as { gstAmount?: unknown }).gstAmount || 0);
+					return sum + (paymentAmount - gstAmount); // Payment excluding GST
+				},
+				0
+			);
+			
+			// Remaining base due = Base Due - Discounts - Payments (excluding GST)
+			const remainingBaseDue = baseDue - totalDiscounts - totalPaymentsExcludingGST;
+
+			// Apply discount if provided
+			const discountAmount = data.discount || 0;
+			
+			// Rule 2: Discount validation (MOST IMPORTANT)
+			// Discount cannot be negative
+			if (discountAmount < 0) {
+				return {
+					success: false,
+					error: "Discount cannot be negative",
+				};
+			}
+			
+			// Discount cannot exceed remaining base due
+			if (discountAmount > remainingBaseDue) {
+				return {
+					success: false,
+					error: `Discount cannot exceed remaining base fee of ₹${remainingBaseDue.toFixed(2)}`,
+				};
+			}
+			
+			// Calculate taxable amount (Base Amount - Discount)
+			// data.amount is the base amount entered by user
+			const taxableAmount = Math.max(0, data.amount - discountAmount);
+			
+			// Rule 6: Validate settlement (never compare GST with Due)
+			// payment_ex_gst <= base_due - discount
+			if (taxableAmount + discountAmount > remainingBaseDue) {
+				return {
+					success: false,
+					error: `Payment amount (₹${taxableAmount.toFixed(2)}) plus discount (₹${discountAmount.toFixed(2)}) exceeds remaining base fee (₹${remainingBaseDue.toFixed(2)})`,
+				};
+			}
+		}
 
 		// Generate invoice number
 		const today = new Date();
@@ -79,19 +137,31 @@ export async function createPayment(data: {
 			"0"
 		)}`;
 
-		// Calculate GST amount if GST percentage is provided
+		// Calculate discount and GST following Golden Formula:
+		// Discount reduces Base, GST applies after Discount, Payment settles Taxable + GST
+		
+		// Step 1: Apply discount to base amount
+		const discountAmount = data.discount || 0;
+		const baseAmount = data.amount; // Base amount (ex-GST) entered by user
+		const taxableAmount = Math.max(0, baseAmount - discountAmount); // Taxable = Base - Discount
+		
+		// Step 2: Calculate GST on taxable amount (Rule 3: GST on Base - Discount)
 		let gstAmount: number | undefined;
-		let totalAmount = data.amount;
+		let finalPayable = taxableAmount;
 		if (data.gstPercentage && data.gstPercentage > 0) {
-			gstAmount = (data.amount * data.gstPercentage) / 100;
-			totalAmount = data.amount + gstAmount;
+			gstAmount = (taxableAmount * data.gstPercentage) / 100;
+			finalPayable = taxableAmount + gstAmount; // Final Payable = Taxable + GST
 		}
+		
+		// Rule 4: Payment validation (if not supporting partial payments)
+		// For now, we allow partial payments, so we don't enforce exact match
 
 		// Create payment record
+		// Store final payable (taxable + GST) as the payment amount
 		const payment = await prisma.payment.create({
 			data: {
 				memberId: data.memberId,
-				amount: totalAmount,
+				amount: finalPayable, // Final Payable = Taxable + GST
 				paymentMode: data.paymentMode,
 				transactionId,
 				notes: data.notes,
@@ -99,9 +169,11 @@ export async function createPayment(data: {
 				gstNumber: data.gstNumber,
 				gstPercentage: data.gstPercentage,
 				gstAmount: gstAmount,
+				discount: discountAmount > 0 ? discountAmount : null,
 				createdBy: session.user.id,
 				paymentDate: new Date(),
-			},
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Prisma types are stale; discount field exists in schema
+			} as any,
 			include: {
 				member: true,
 			},
@@ -143,7 +215,7 @@ export async function createPayment(data: {
 				entity: "Payment",
 				entityId: payment.id,
 				details: {
-					amount: totalAmount,
+					amount: finalPayable,
 					invoiceNumber,
 					memberName: member.name,
 				},

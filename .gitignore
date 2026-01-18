@@ -41,3 +41,8 @@ yarn-error.log*
 next-env.d.ts
 
 /app/generated/prisma
+
+# Setup guides with sensitive info
+NEON_SETUP.md
+VERCEL_BLOB_SETUP.md
+VERCEL_FILE_UPLOAD_FIX.md
