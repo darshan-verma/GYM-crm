@@ -6,7 +6,7 @@ This guide helps you deploy the Pro Bodyline CRM to Vercel successfully.
 
 The project is configured to automatically generate Prisma Client during the build process:
 
-- **Build Script**: `prisma generate && next build`
+- **Build Script**: `prisma generate && prisma migrate deploy && next build` (generates Prisma Client, runs migrations, then builds)
 - **Postinstall Script**: `prisma generate` (runs after npm install)
 
 ## Environment Variables
@@ -67,7 +67,7 @@ Make sure to set these environment variables in your Vercel project settings:
    - Vercel will automatically:
      - Install dependencies
      - Run `prisma generate` (via postinstall script)
-     - Run `prisma generate && next build` (via build script)
+     - Run `prisma generate && prisma migrate deploy && next build` (via build script)
      - Deploy your application
 
 ## Troubleshooting
@@ -96,11 +96,18 @@ If you see errors about Prisma Client not being generated:
    - Test the connection string locally
 
 2. **Database Migrations**
-   - Run migrations before deploying:
+   - **Automatic (Recommended)**: Migrations now run automatically during build via the build script
+   - **Manual**: If you need to run migrations separately, use:
      ```bash
+     # Set DATABASE_URL environment variable first
+     export DATABASE_URL="your-production-database-url"
      npx prisma migrate deploy
      ```
-   - Or use Vercel's database integration
+   - Or use Vercel CLI to run migrations:
+     ```bash
+     vercel env pull .env.production
+     npx prisma migrate deploy
+     ```
 
 3. **Connection Pooling**
    - For serverless, consider using a connection pooler like:
@@ -138,6 +145,6 @@ If builds are timing out:
 
 ## Additional Resources
 
-- [Prisma on Vercel](https://www.prisma.io/docs/guides/deployment/deployment-guides/deploying-to-vercel)
+- [Prisma on Vercel]
 - [Next.js on Vercel](https://nextjs.org/docs/deployment)
 - [Vercel Documentation](https://vercel.com/docs)
