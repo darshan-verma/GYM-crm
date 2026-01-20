@@ -109,7 +109,7 @@ export default async function MemberDetailPage({
 							<Badge variant="outline" className={statusColors[member.status]}>
 								{member.status}
 							</Badge>
-							{activeMembership && (
+							{activeMembership && activeMembership.plan && (
 								<Badge variant="outline">{activeMembership.plan.name}</Badge>
 							)}
 						</div>
@@ -262,48 +262,50 @@ export default async function MemberDetailPage({
 				{/* Main Content */}
 				<div className="md:col-span-2 space-y-6">
 					{/* Active Membership */}
-					{activeMembership && (
-						<Card>
-							<CardHeader>
-								<div className="flex items-center justify-between">
-									<div>
-										<CardTitle>Active Membership</CardTitle>
-										<CardDescription>
-											Current membership plan details
-										</CardDescription>
+					{activeMembership && activeMembership.plan && (() => {
+						const plan = activeMembership.plan;
+						return (
+							<Card>
+								<CardHeader>
+									<div className="flex items-center justify-between">
+										<div>
+											<CardTitle>Active Membership</CardTitle>
+											<CardDescription>
+												Current membership plan details
+											</CardDescription>
+										</div>
+										<MembershipEditButton
+											membership={{
+												id: activeMembership.id,
+												memberId: activeMembership.memberId,
+												planId: activeMembership.planId,
+												startDate: activeMembership.startDate,
+												endDate: activeMembership.endDate,
+												amount: Number(activeMembership.amount),
+												discount: activeMembership.discount
+													? Number(activeMembership.discount)
+													: undefined,
+												discountType: activeMembership.discountType || undefined,
+												finalAmount: Number(activeMembership.finalAmount),
+												notes: activeMembership.notes || undefined,
+												plan: {
+													id: plan.id,
+													name: plan.name,
+													price: Number(plan.price),
+													duration: plan.duration,
+												},
+											}}
+										/>
 									</div>
-									<MembershipEditButton
-										membership={{
-											id: activeMembership.id,
-											memberId: activeMembership.memberId,
-											planId: activeMembership.planId,
-											startDate: activeMembership.startDate,
-											endDate: activeMembership.endDate,
-											amount: Number(activeMembership.amount),
-											discount: activeMembership.discount
-												? Number(activeMembership.discount)
-												: undefined,
-											discountType: activeMembership.discountType || undefined,
-											finalAmount: Number(activeMembership.finalAmount),
-											notes: activeMembership.notes || undefined,
-											plan: {
-												id: activeMembership.plan.id,
-												name: activeMembership.plan.name,
-												price: Number(activeMembership.plan.price),
-												duration: activeMembership.plan.duration,
-											},
-										}}
-									/>
-								</div>
-							</CardHeader>
-							<CardContent>
-								<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-									<div>
-										<p className="text-sm text-muted-foreground">Plan</p>
-										<p className="text-lg font-semibold">
-											{activeMembership.plan.name}
-										</p>
-									</div>
+								</CardHeader>
+								<CardContent>
+									<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+										<div>
+											<p className="text-sm text-muted-foreground">Plan</p>
+											<p className="text-lg font-semibold">
+												{plan.name}
+											</p>
+										</div>
 									<div>
 										<p className="text-sm text-muted-foreground">Total Amount</p>
 										<p className="text-lg font-semibold">
@@ -345,7 +347,8 @@ export default async function MemberDetailPage({
 								</div>
 							</CardContent>
 						</Card>
-					)}
+						);
+					})()}
 
 					{/* Tabs */}
 					<Tabs defaultValue="payments" className="w-full">

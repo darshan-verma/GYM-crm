@@ -4,6 +4,7 @@ import prisma from "@/lib/db/prisma";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { PaymentMode } from "@prisma/client";
+import { createActivityLog } from "@/lib/utils/activityLog";
 
 export async function createPayment(data: {
 	memberId: string;
@@ -207,18 +208,16 @@ export async function createPayment(data: {
 			}
 		}
 
-		// Log activity
-		await prisma.activityLog.create({
-			data: {
-				userId: session.user.id,
-				action: "CREATE",
-				entity: "Payment",
-				entityId: payment.id,
-				details: {
-					amount: finalPayable,
-					invoiceNumber,
-					memberName: member.name,
-				},
+		// Log activity (don't fail if logging fails)
+		await createActivityLog({
+			userId: session.user.id,
+			action: "CREATE",
+			entity: "Payment",
+			entityId: payment.id,
+			details: {
+				amount: finalPayable,
+				invoiceNumber,
+				memberName: member.name,
 			},
 		});
 

@@ -5,6 +5,8 @@ import { put } from "@vercel/blob";
 import prisma from "@/lib/db/prisma";
 import { auth } from "@/lib/auth";
 import { MembershipStatus } from "@prisma/client";
+import { createNewMemberNotification } from "./notifications";
+import { createActivityLog } from "@/lib/utils/activityLog";
 
 export async function createMember(formData: FormData) {
 	const session = await auth();
@@ -116,23 +118,24 @@ export async function createMember(formData: FormData) {
 		}
 
 		// Log activity (don't fail if logging fails)
+		await createActivityLog({
+			userId: session.user.id,
+			action: "CREATE",
+			entity: "Member",
+			entityId: member.id,
+			details: {
+				membershipNumber,
+				name: member.name,
+				membershipCreated: !!membershipPlanId,
+			},
+		});
+
+		// Create notification for new member (don't fail if this fails)
 		try {
-			await prisma.activityLog.create({
-				data: {
-					userId: session.user.id,
-					action: "CREATE",
-					entity: "Member",
-					entityId: member.id,
-					details: {
-						membershipNumber,
-						name: member.name,
-						membershipCreated: !!membershipPlanId,
-					},
-				},
-			});
-		} catch (logError) {
-			console.warn("Failed to create activity log:", logError);
-			// Don't fail member creation if logging fails
+			await createNewMemberNotification(member.id, member.name, membershipNumber);
+		} catch (notificationError) {
+			console.warn("Failed to create new member notification:", notificationError);
+			// Don't fail member creation if notification creation fails
 		}
 
 		revalidatePath("/members");
@@ -217,7 +220,7 @@ export async function getMembers(params?: {
 }
 
 export async function getMemberById(id: string) {
-	return await prisma.member.findUnique({
+	const member = await prisma.member.findUnique({
 		where: { id },
 		include: {
 			trainer: true,
@@ -243,6 +246,34 @@ export async function getMemberById(id: string) {
 			},
 		},
 	});
+
+	if (!member) return null;
+
+	// Serialize Decimal objects to numbers for client components
+	return {
+		...member,
+		latitude: member.latitude ? Number(member.latitude) : null,
+		longitude: member.longitude ? Number(member.longitude) : null,
+		memberships: member.memberships.map((membership) => ({
+			...membership,
+			amount: Number(membership.amount),
+			discount: membership.discount ? Number(membership.discount) : null,
+			finalAmount: Number(membership.finalAmount),
+			plan: membership.plan
+				? {
+						...membership.plan,
+						price: Number(membership.plan.price),
+					}
+				: null,
+		})),
+		payments: member.payments.map((payment) => ({
+			...payment,
+			amount: Number(payment.amount),
+			gstPercentage: payment.gstPercentage ? Number(payment.gstPercentage) : null,
+			gstAmount: payment.gstAmount ? Number(payment.gstAmount) : null,
+			discount: payment.discount ? Number(payment.discount) : null,
+		})),
+	};
 }
 
 export async function updateMember(id: string, formData: FormData) {
@@ -344,14 +375,13 @@ export async function updateMember(id: string, formData: FormData) {
 			data,
 		});
 
-		await prisma.activityLog.create({
-			data: {
-				userId: session.user.id,
-				action: "UPDATE",
-				entity: "Member",
-				entityId: id,
-				details: { name: member.name },
-			},
+		// Log activity (don't fail if logging fails)
+		await createActivityLog({
+			userId: session.user.id,
+			action: "UPDATE",
+			entity: "Member",
+			entityId: id,
+			details: { name: member.name },
 		});
 
 		revalidatePath(`/members/${id}`);

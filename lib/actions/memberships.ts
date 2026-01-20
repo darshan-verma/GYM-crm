@@ -3,6 +3,8 @@
 import prisma from "@/lib/db/prisma";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
+import { updateMembershipNotifications } from "./notifications";
+import { createActivityLog } from "@/lib/utils/activityLog";
 
 export async function getMembershipPlans() {
 	const plans = await prisma.membershipPlan.findMany({
@@ -185,18 +187,24 @@ export async function assignMembership(data: {
 		});
 
 		// Log activity
-		await prisma.activityLog.create({
-			data: {
-				userId: session.user.id,
-				action: "CREATE",
-				entity: "Membership",
-				entityId: membership.id,
-				details: {
-					memberName: membership.member.name,
-					planName: membership.plan.name,
-				},
+		await createActivityLog({
+			userId: session.user.id,
+			action: "CREATE",
+			entity: "Membership",
+			entityId: membership.id,
+			details: {
+				memberName: membership.member.name,
+				planName: membership.plan.name,
 			},
 		});
+
+		// Update notifications for new membership
+		try {
+			await updateMembershipNotifications(membership.id);
+		} catch (notifError) {
+			console.warn("Failed to update membership notifications:", notifError);
+			// Don't fail the creation if notification update fails
+		}
 
 		revalidatePath(`/members/${data.memberId}`);
 		revalidatePath("/members");
@@ -272,18 +280,24 @@ export async function updateMembership(
 		});
 
 		// Log activity
-		await prisma.activityLog.create({
-			data: {
-				userId: session.user.id,
-				action: "UPDATE",
-				entity: "Membership",
-				entityId: updatedMembership.id,
-				details: {
-					memberName: updatedMembership.member.name,
-					planName: updatedMembership.plan.name,
-				},
+		await createActivityLog({
+			userId: session.user.id,
+			action: "UPDATE",
+			entity: "Membership",
+			entityId: updatedMembership.id,
+			details: {
+				memberName: updatedMembership.member.name,
+				planName: updatedMembership.plan.name,
 			},
 		});
+
+		// Update notifications since end date may have changed
+		try {
+			await updateMembershipNotifications(membershipId);
+		} catch (notifError) {
+			console.warn("Failed to update membership notifications:", notifError);
+			// Don't fail the update if notification update fails
+		}
 
 		revalidatePath(`/members/${currentMembership.memberId}`);
 		revalidatePath("/members");
@@ -337,16 +351,14 @@ export async function renewMembership(membershipId: string) {
 			data: { status: "ACTIVE" },
 		});
 
-		await prisma.activityLog.create({
-			data: {
-				userId: session.user.id,
-				action: "RENEW",
-				entity: "Membership",
-				entityId: newMembership.id,
-				details: {
-					memberName: currentMembership.member.name,
-					planName: currentMembership.plan.name,
-				},
+		await createActivityLog({
+			userId: session.user.id,
+			action: "RENEW",
+			entity: "Membership",
+			entityId: newMembership.id,
+			details: {
+				memberName: currentMembership.member.name,
+				planName: currentMembership.plan.name,
 			},
 		});
 

@@ -4,6 +4,8 @@ import prisma from "@/lib/db/prisma";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { LeadStatus, LeadSource } from "@prisma/client";
+import { updateLeadNotification } from "./notifications";
+import { createActivityLog } from "@/lib/utils/activityLog";
 
 export async function createLead(data: {
 	name: string;
@@ -27,14 +29,12 @@ export async function createLead(data: {
 			},
 		});
 
-		await prisma.activityLog.create({
-			data: {
-				userId: session.user.id,
-				action: "CREATE",
-				entity: "Lead",
-				entityId: lead.id,
-				details: { name: lead.name, source: lead.source },
-			},
+		await createActivityLog({
+			userId: session.user.id,
+			action: "CREATE",
+			entity: "Lead",
+			entityId: lead.id,
+			details: { name: lead.name, source: lead.source },
 		});
 
 		revalidatePath("/leads");
@@ -58,14 +58,12 @@ export async function updateLeadStatus(leadId: string, status: LeadStatus) {
 			},
 		});
 
-		await prisma.activityLog.create({
-			data: {
-				userId: session.user.id,
-				action: "UPDATE",
-				entity: "Lead",
-				entityId: leadId,
-				details: { status },
-			},
+		await createActivityLog({
+			userId: session.user.id,
+			action: "UPDATE",
+			entity: "Lead",
+			entityId: leadId,
+			details: { status },
 		});
 
 		revalidatePath("/leads");
@@ -97,6 +95,16 @@ export async function updateLead(
 				lastContactDate: new Date(),
 			},
 		});
+
+		// Update notification if follow-up date changed
+		if (data.followUpDate !== undefined) {
+			try {
+				await updateLeadNotification(leadId);
+			} catch (notifError) {
+				console.warn("Failed to update lead notification:", notifError);
+				// Don't fail the update if notification update fails
+			}
+		}
 
 		revalidatePath("/leads");
 		return { success: true, data: lead };

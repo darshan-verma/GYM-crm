@@ -113,6 +113,19 @@ enum NotificationStatus {
   FAILED
 }
 
+enum InAppNotificationType {
+  LEAD_FOLLOW_UP
+  PAYMENT_DUE
+  MEMBERSHIP_EXPIRING
+  NEW_MEMBER
+}
+
+enum InAppNotificationStatus {
+  UNREAD
+  READ
+  DISMISSED
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -430,4 +443,23 @@ model Exercise {
 
   @@index([name])
   @@index([category])
+}
+
+model InAppNotification {
+  id          String                   @id @default(cuid())
+  type        InAppNotificationType
+  title       String
+  message     String
+  entityType  String // Lead, Member, Payment
+  entityId    String?
+  status      InAppNotificationStatus  @default(UNREAD)
+  metadata    Json? // Additional data like expiry date, amount, etc.
+  createdAt   DateTime                 @default(now())
+  readAt      DateTime?
+  dismissedAt DateTime?
+
+  @@index([status])
+  @@index([type])
+  @@index([entityType, entityId])
+  @@index([createdAt])
 }
