@@ -73,6 +73,10 @@ export default function MemberForm({
 }: MemberFormProps) {
 	const router = useRouter();
 	const [loading, setLoading] = useState(false);
+	// Always start with empty string for new members, only use initialData for edit mode
+	const [selectedMembershipPlan, setSelectedMembershipPlan] = useState<string>(
+		isEdit && initialData?.membershipPlanId ? initialData.membershipPlanId : ""
+	);
 	const [photoPreview, setPhotoPreview] = useState(initialData?.photo || "");
 	const [locationData, setLocationData] = useState<{
 		address: string;
@@ -98,9 +102,38 @@ export default function MemberForm({
 
 	async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
 		e.preventDefault();
-		setLoading(true);
-
+		
+		// Validate membership BEFORE setting loading state
+		if (!selectedMembershipPlan || selectedMembershipPlan.trim() === "" || selectedMembershipPlan === "none") {
+			toast.error("Please select a membership plan. Membership is required to create a member.");
+			return;
+		}
+		
+		// Verify the selected plan exists
+		const planExists = membershipPlans.some(plan => plan.id === selectedMembershipPlan);
+		if (!planExists) {
+			toast.error("Please select a valid membership plan from the list.");
+			return;
+		}
+		
+		// Validate address BEFORE setting loading state
 		const formData = new FormData(e.currentTarget);
+		const address = formData.get("address") as string;
+		const formattedAddress = locationData?.formattedAddress || address;
+		if (!address && !formattedAddress) {
+			toast.error("Address is required. Please enter an address or select a location on the map.");
+			return;
+		}
+		
+		setLoading(true);
+		
+		// If address is empty but formattedAddress exists, use formattedAddress
+		if (!address && formattedAddress) {
+			formData.set("address", formattedAddress);
+		}
+
+		// Set membership plan ID from state (already validated above)
+		formData.set("membershipPlanId", selectedMembershipPlan);
 
 		// Handle special values
 		if (formData.get("trainerId") === "none") {
@@ -293,14 +326,17 @@ export default function MemberForm({
 			{/* Address */}
 			<div className="space-y-4">
 				<div className="space-y-2">
-					<Label htmlFor="address">Address</Label>
+					<Label htmlFor="address">Address *</Label>
 					<Input
 						id="address"
 						name="address"
 						defaultValue={initialData?.address}
 						disabled={loading}
-						placeholder="Street address"
+						placeholder="Street address or select location on map"
 					/>
+					<p className="text-xs text-muted-foreground mt-1">
+						Enter address manually or use the location picker below
+					</p>
 				</div>
 
 				<div className="grid gap-4 md:grid-cols-3">
@@ -427,17 +463,31 @@ export default function MemberForm({
 					</div>
 
 					<div className="space-y-2">
-						<Label htmlFor="membershipPlanId">Membership Plan</Label>
-						<Select
+						<Label htmlFor="membershipPlanId">
+							Membership Plan *
+						</Label>
+						{/* Hidden input to ensure formData has the value */}
+						<input
+							type="hidden"
 							name="membershipPlanId"
-							defaultValue={initialData?.membershipPlanId || "none"}
+							value={selectedMembershipPlan}
+						/>
+						<Select
+							value={selectedMembershipPlan}
+							onValueChange={(value) => {
+								if (value && value !== "none" && value.trim() !== "") {
+									setSelectedMembershipPlan(value);
+								} else {
+									setSelectedMembershipPlan("");
+								}
+							}}
 							disabled={loading}
+							required
 						>
-							<SelectTrigger>
-								<SelectValue placeholder="Select membership plan" />
+							<SelectTrigger className={!selectedMembershipPlan ? "border-destructive" : ""}>
+								<SelectValue placeholder="Select membership plan (required)" />
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value="none">No Membership</SelectItem>
 								{membershipPlans.map((plan) => (
 									<SelectItem key={plan.id} value={plan.id}>
 										{plan.name} - ₹{plan.price} ({plan.duration} days)
@@ -445,6 +495,16 @@ export default function MemberForm({
 								))}
 							</SelectContent>
 						</Select>
+						{!selectedMembershipPlan && (
+							<p className="text-xs text-destructive mt-1">
+								Please select a membership plan to continue
+							</p>
+						)}
+						{selectedMembershipPlan && (
+							<p className="text-xs text-muted-foreground mt-1">
+								Membership plan selected
+							</p>
+						)}
 					</div>
 				</div>
 

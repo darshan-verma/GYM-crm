@@ -15,6 +15,7 @@ import {
 	Flame,
 	Edit,
 } from "lucide-react";
+import ExportDietPlanButton from "@/components/diets/ExportDietPlanButton";
 
 interface FoodItem {
 	foodName?: string;
@@ -28,6 +29,11 @@ interface Meal {
 	mealName?: string;
 	items?: FoodItem[];
 	foods?: FoodItem[];
+}
+
+interface Day {
+	day: string;
+	meals: Meal[];
 }
 
 export default async function DietDetailPage({
@@ -110,11 +116,24 @@ export default async function DietDetailPage({
 		};
 	};
 
-	const meals =
-		(plan.meals as Meal[]).map((meal: Meal) => ({
-			mealName: meal.mealTime || meal.mealName,
-			foods: meal.items || meal.foods || [],
-		})) || [];
+	// Check if it's the new day-wise format or old flat format
+	const mealsArray = Array.isArray(plan.meals) ? plan.meals : [];
+	const firstItem = mealsArray.length > 0 ? mealsArray[0] : null;
+	const isDayWise = firstItem !== null && 
+		typeof firstItem === 'object' && 
+		!Array.isArray(firstItem) &&
+		'day' in firstItem;
+	
+	const days = isDayWise 
+		? (plan.meals as unknown as Day[])
+		: null;
+	
+	const meals = !isDayWise
+		? (plan.meals as Meal[]).map((meal: Meal) => ({
+				mealName: meal.mealTime || meal.mealName,
+				foods: meal.items || meal.foods || [],
+			})) || []
+		: [];
 
 	return (
 		<div className="space-y-6">
@@ -143,12 +162,15 @@ export default async function DietDetailPage({
 						</div>
 					</div>
 				</div>
-				<Link href={`/diets/${plan.id}/edit`}>
-					<Button>
-						<Edit className="h-4 w-4 mr-2" />
-						Edit Plan
-					</Button>
-				</Link>
+				<div className="flex gap-2">
+					<ExportDietPlanButton plan={plan as unknown as Parameters<typeof ExportDietPlanButton>[0]['plan']} />
+					<Link href={`/diets/${plan.id}/edit`}>
+						<Button>
+							<Edit className="h-4 w-4 mr-2" />
+							Edit Plan
+						</Button>
+					</Link>
+				</div>
 			</div>
 
 			{plan.description && (
@@ -229,8 +251,14 @@ export default async function DietDetailPage({
 					<CardContent>
 						<div className="flex items-center gap-2">
 							<UtensilsCrossed className="h-5 w-5 text-purple-600" />
-							<span className="text-2xl font-bold">{meals.length}</span>
-							<span className="text-gray-600">per day</span>
+							<span className="text-2xl font-bold">
+								{isDayWise && days
+									? days.reduce((total, day) => total + day.meals.length, 0)
+									: meals.length}
+							</span>
+							<span className="text-gray-600">
+								{isDayWise ? "total meals" : "per day"}
+							</span>
 						</div>
 					</CardContent>
 				</Card>
@@ -245,7 +273,94 @@ export default async function DietDetailPage({
 						</CardTitle>
 					</CardHeader>
 					<CardContent className="space-y-6">
-						{meals.length > 0 ? (
+						{isDayWise && days ? (
+							// New day-wise format
+							days.map((day, dayIndex) => (
+								<div key={dayIndex} className="space-y-4">
+									<div className="flex items-center gap-2 pb-2 border-b-2 border-blue-500">
+										<h3 className="text-xl font-bold text-blue-600">{day.day}</h3>
+									</div>
+									<div className="space-y-3 pl-4">
+										{day.meals.map((meal: Meal, mealIndex: number) => {
+											const macros = calculateMealMacros(meal);
+											return (
+												<div key={mealIndex} className="border rounded-lg p-4 bg-white space-y-3">
+													<div className="flex items-center justify-between">
+														<h3 className="font-semibold text-lg">
+															{meal.mealTime || meal.mealName}
+														</h3>
+														<div className="flex gap-2 text-sm">
+															<Badge variant="outline">{macros.calories} kcal</Badge>
+														</div>
+													</div>
+
+													<div className="grid grid-cols-3 gap-2 text-xs mb-3">
+														<div className="text-center p-2 bg-purple-50 rounded">
+															<div className="font-semibold text-purple-700">
+																{macros.protein}g
+															</div>
+															<div className="text-gray-600">Protein</div>
+														</div>
+														<div className="text-center p-2 bg-blue-50 rounded">
+															<div className="font-semibold text-blue-700">
+																{macros.carbs}g
+															</div>
+															<div className="text-gray-600">Carbs</div>
+														</div>
+														<div className="text-center p-2 bg-yellow-50 rounded">
+															<div className="font-semibold text-yellow-700">
+																{macros.fat}g
+															</div>
+															<div className="text-gray-600">Fats</div>
+														</div>
+													</div>
+
+													<div className="space-y-2">
+														{(meal.items || meal.foods || []).map((food: FoodItem, foodIndex: number) => {
+															const foodItem = foodDatabase.find(
+																(f) => f.name === (food.foodName || food.name)
+															);
+															return (
+																<div
+																	key={foodIndex}
+																	className="flex items-center justify-between p-2 bg-gray-50 rounded"
+																>
+																	<div>
+																		<div className="font-medium">{food.foodName || food.name}</div>
+																		{foodItem && (
+																			<div className="text-xs text-gray-600">
+																				{foodItem.calories * (food.portion || 1)} cal
+																				| P:{" "}
+																				{Math.round(
+																					foodItem.protein * (food.portion || 1)
+																				)}
+																				g | C:{" "}
+																				{Math.round(
+																					foodItem.carbs * (food.portion || 1)
+																				)}
+																				g | F:{" "}
+																				{Math.round(
+																					foodItem.fat * (food.portion || 1)
+																				)}
+																				g
+																			</div>
+																		)}
+																	</div>
+																	<div className="text-sm text-gray-600">
+																		{food.portion} {food.unit}
+																	</div>
+																</div>
+															);
+														})}
+													</div>
+												</div>
+											);
+										})}
+									</div>
+								</div>
+							))
+						) : meals.length > 0 ? (
+							// Old flat format (backward compatibility)
 							meals.map((meal: Meal, index: number) => {
 								const macros = calculateMealMacros(meal);
 								return (

@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { ArrowLeft, User, Calendar, Dumbbell, Clock, Edit } from "lucide-react";
 import { notFound } from "next/navigation";
+import ExportWorkoutPlanButton from "@/components/workouts/ExportWorkoutPlanButton";
 
 interface Exercise {
 	name: string;
@@ -13,6 +14,11 @@ interface Exercise {
 	reps?: number;
 	weight?: number;
 	restTime?: number;
+}
+
+interface Day {
+	day: string;
+	exercises: Exercise[];
 }
 
 export default async function WorkoutPlanDetailPage({
@@ -80,12 +86,15 @@ export default async function WorkoutPlanDetailPage({
 						)}
 					</div>
 				</div>
-				<Link href={`/workouts/${plan.id}/edit`}>
-					<Button>
-						<Edit className="h-4 w-4 mr-2" />
-						Edit Plan
-					</Button>
-				</Link>
+				<div className="flex gap-2">
+					<ExportWorkoutPlanButton plan={plan as unknown as Parameters<typeof ExportWorkoutPlanButton>[0]['plan']} />
+					<Link href={`/workouts/${plan.id}/edit`}>
+						<Button>
+							<Edit className="h-4 w-4 mr-2" />
+							Edit Plan
+						</Button>
+					</Link>
+				</div>
 			</div>
 
 			<div className="grid gap-6 md:grid-cols-3">
@@ -153,55 +162,121 @@ export default async function WorkoutPlanDetailPage({
 				<CardHeader>
 					<CardTitle className="flex items-center gap-2">
 						<Dumbbell className="h-5 w-5" />
-						Exercises ({(plan.exercises as unknown as Exercise[]).length})
+						Workout Plan
 					</CardTitle>
 				</CardHeader>
 				<CardContent>
-					<div className="space-y-4">
-						{(plan.exercises as unknown as Exercise[]).map(
-							(exercise, index) => (
-								<div
-									key={index}
-									className="p-4 border rounded-lg hover:border-blue-300 transition-colors"
-								>
-									<div className="flex items-start justify-between mb-3">
-										<div>
-											<h4 className="font-semibold text-lg">
-												{index + 1}. {exercise.name}
-											</h4>
-											{exercise.notes && (
-												<p className="text-sm text-gray-600 mt-1">
-													{exercise.notes}
-												</p>
-											)}
-										</div>
+					{/* Check if it's the new day-wise format or old flat format */}
+					{(() => {
+						const exercisesArray = Array.isArray(plan.exercises) ? plan.exercises : [];
+						if (exercisesArray.length === 0) return false;
+						const firstItem = exercisesArray[0];
+						if (firstItem === null || typeof firstItem !== 'object' || Array.isArray(firstItem)) {
+							return false;
+						}
+						return 'day' in firstItem;
+					})() ? (
+						// New day-wise format
+						<div className="space-y-6">
+							{(plan.exercises as unknown as Day[]).map((day, dayIndex) => (
+								<div key={dayIndex} className="space-y-4">
+									<div className="flex items-center gap-2 pb-2 border-b-2 border-blue-500">
+										<h3 className="text-xl font-bold text-blue-600">{day.day}</h3>
 									</div>
+									<div className="space-y-3 pl-4">
+										{day.exercises.map((exercise, exerciseIndex) => (
+											<div
+												key={exerciseIndex}
+												className="p-4 border rounded-lg hover:border-blue-300 transition-colors bg-white"
+											>
+												<div className="flex items-start justify-between mb-3">
+													<div>
+														<h4 className="font-semibold text-lg">
+															{exerciseIndex + 1}. {exercise.name}
+														</h4>
+														{exercise.notes && (
+															<p className="text-sm text-gray-600 mt-1">
+																{exercise.notes}
+															</p>
+														)}
+													</div>
+												</div>
 
-									<div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-										<div>
-											<span className="text-gray-600">Sets:</span>
-											<p className="font-semibold">{exercise.sets}</p>
-										</div>
-										<div>
-											<span className="text-gray-600">Reps:</span>
-											<p className="font-semibold">{exercise.reps}</p>
-										</div>
-										<div>
-											<span className="text-gray-600">Weight:</span>
-											<p className="font-semibold">{exercise.weight} kg</p>
-										</div>
-										<div>
-											<span className="text-gray-600">Rest:</span>
-											<p className="font-semibold flex items-center gap-1">
-												<Clock className="h-3 w-3" />
-												{exercise.restTime}s
-											</p>
-										</div>
+												<div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+													<div>
+														<span className="text-gray-600">Sets:</span>
+														<p className="font-semibold">{exercise.sets || "N/A"}</p>
+													</div>
+													<div>
+														<span className="text-gray-600">Reps:</span>
+														<p className="font-semibold">{exercise.reps || "N/A"}</p>
+													</div>
+													<div>
+														<span className="text-gray-600">Weight:</span>
+														<p className="font-semibold">{exercise.weight ? `${exercise.weight} kg` : "N/A"}</p>
+													</div>
+													<div>
+														<span className="text-gray-600">Rest:</span>
+														<p className="font-semibold flex items-center gap-1">
+															<Clock className="h-3 w-3" />
+															{exercise.restTime ? `${exercise.restTime}s` : "N/A"}
+														</p>
+													</div>
+												</div>
+											</div>
+										))}
 									</div>
 								</div>
-							)
-						)}
-					</div>
+							))}
+						</div>
+					) : (
+						// Old flat format (backward compatibility)
+						<div className="space-y-4">
+							{(plan.exercises as unknown as Exercise[]).map(
+								(exercise, index) => (
+									<div
+										key={index}
+										className="p-4 border rounded-lg hover:border-blue-300 transition-colors"
+									>
+										<div className="flex items-start justify-between mb-3">
+											<div>
+												<h4 className="font-semibold text-lg">
+													{index + 1}. {exercise.name}
+												</h4>
+												{exercise.notes && (
+													<p className="text-sm text-gray-600 mt-1">
+														{exercise.notes}
+													</p>
+												)}
+											</div>
+										</div>
+
+										<div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+											<div>
+												<span className="text-gray-600">Sets:</span>
+												<p className="font-semibold">{exercise.sets}</p>
+											</div>
+											<div>
+												<span className="text-gray-600">Reps:</span>
+												<p className="font-semibold">{exercise.reps}</p>
+											</div>
+											<div>
+												<span className="text-gray-600">Weight:</span>
+												<p className="font-semibold">{exercise.weight} kg</p>
+											</div>
+											<div>
+												<span className="text-gray-600">Rest:</span>
+												<p className="font-semibold flex items-center gap-1">
+													<Clock className="h-3 w-3" />
+													{exercise.restTime}s
+												</p>
+											</div>
+										</div>
+									</div>
+								)
+							)}
+						</div>
+					)}
 				</CardContent>
 			</Card>
 

@@ -47,6 +47,33 @@ export async function createMember(formData: FormData) {
 		const membershipPlanId =
 			(formData.get("membershipPlanId") as string) || null;
 
+		// Validate membership plan is required
+		if (!membershipPlanId || membershipPlanId === "none" || membershipPlanId.trim() === "") {
+			return {
+				success: false,
+				error: "Membership plan is required to create a member",
+			};
+		}
+
+		// Verify the membership plan exists and is active
+		const membershipPlan = await prisma.membershipPlan.findUnique({
+			where: { id: membershipPlanId },
+		});
+
+		if (!membershipPlan) {
+			return {
+				success: false,
+				error: "Selected membership plan not found",
+			};
+		}
+
+		if (!membershipPlan.active) {
+			return {
+				success: false,
+				error: "Selected membership plan is not active",
+			};
+		}
+
 		// Handle photo upload using Vercel Blob Storage
 		let photoPath = null;
 		const photo = formData.get("photo") as File;
@@ -91,31 +118,23 @@ export async function createMember(formData: FormData) {
 			},
 		});
 
-		// Create membership if plan is selected
-		if (membershipPlanId) {
-			const membershipPlan = await prisma.membershipPlan.findUnique({
-				where: { id: membershipPlanId },
-			});
+		// Create membership (plan is already validated above)
+		const startDate = new Date();
+		const endDate = new Date(startDate);
+		endDate.setDate(startDate.getDate() + membershipPlan.duration);
 
-			if (membershipPlan) {
-				const startDate = new Date();
-				const endDate = new Date(startDate);
-				endDate.setDate(startDate.getDate() + membershipPlan.duration);
-
-				await prisma.membership.create({
-					data: {
-						memberId: member.id,
-						planId: membershipPlanId,
-						startDate,
-						endDate,
-						amount: membershipPlan.price,
-						finalAmount: membershipPlan.price,
-						active: true,
-						autoRenew: false,
-					},
-				});
-			}
-		}
+		await prisma.membership.create({
+			data: {
+				memberId: member.id,
+				planId: membershipPlanId,
+				startDate,
+				endDate,
+				amount: membershipPlan.price,
+				finalAmount: membershipPlan.price,
+				active: true,
+				autoRenew: false,
+			},
+		});
 
 		// Log activity (don't fail if logging fails)
 		await createActivityLog({

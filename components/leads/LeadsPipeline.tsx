@@ -76,7 +76,7 @@ export default function LeadsPipeline({ leadsByStatus }: LeadsPipelineProps) {
             onDrop={() => handleDrop(column.status)}
           >
             {/* Column Header */}
-            <Card>
+            <Card className="sticky top-16 z-20 shadow-sm bg-card">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-medium">

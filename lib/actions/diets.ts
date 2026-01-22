@@ -4,6 +4,7 @@ import prisma from "@/lib/db/prisma";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
+import { createActivityLog } from "@/lib/utils/activityLog";
 
 interface FoodItem {
 	foodName: string;
@@ -19,6 +20,11 @@ interface Meal {
 	carbs: number;
 	fats: number;
 	notes: string;
+}
+
+interface Day {
+	day: string;
+	meals: Meal[];
 }
 
 export async function getDietPlans(memberId?: string) {
@@ -64,7 +70,7 @@ export async function createDietPlan(data: {
 	memberId: string;
 	name: string;
 	description?: string;
-	meals: Meal[];
+	meals: Meal[] | Day[];
 	calorieTarget?: number;
 	proteinTarget?: number;
 	carbTarget?: number;
@@ -77,6 +83,9 @@ export async function createDietPlan(data: {
 	if (!session) throw new Error("Unauthorized");
 
 	try {
+		// Check if it's the new day-wise format or old flat format
+		const isDayWise = Array.isArray(data.meals) && data.meals.length > 0 && 'day' in data.meals[0];
+		
 		// Calculate total macros from meals
 		let totalCalories = 0;
 		let totalProtein = 0;
@@ -84,8 +93,8 @@ export async function createDietPlan(data: {
 		// Get foods from database for calculations
 		const foods = await prisma.food.findMany();
 
-		data.meals.forEach((meal: Meal) => {
-			const foodItems = meal.items;
+		const calculateMealMacros = (meal: Meal) => {
+			const foodItems = meal.items || [];
 			foodItems.forEach((foodItem: FoodItem) => {
 				const foodName = foodItem.foodName;
 				const food = foods.find((f) => f.name === foodName);
@@ -114,7 +123,21 @@ export async function createDietPlan(data: {
 					totalProtein += Number(food.protein) * multiplier;
 				}
 			});
-		});
+		};
+
+		if (isDayWise) {
+			// Day-wise format: iterate through days, then meals
+			(data.meals as Day[]).forEach((day: Day) => {
+				day.meals.forEach((meal: Meal) => {
+					calculateMealMacros(meal);
+				});
+			});
+		} else {
+			// Old flat format: iterate through meals directly
+			(data.meals as Meal[]).forEach((meal: Meal) => {
+				calculateMealMacros(meal);
+			});
+		}
 
 		await prisma.dietPlan.create({
 			data: {
@@ -130,21 +153,20 @@ export async function createDietPlan(data: {
 			},
 		});
 
-		await prisma.activityLog.create({
-			data: {
-				userId: session.user.id,
-				action: "CREATE_DIET_PLAN",
-				entity: "DIET_PLAN",
-				entityId: data.memberId,
-				details: `Created diet plan: ${data.name}`,
-			},
+		await createActivityLog({
+			userId: session.user.id,
+			action: "CREATE_DIET_PLAN",
+			entity: "DIET_PLAN",
+			entityId: data.memberId,
+			details: `Created diet plan: ${data.name}`,
 		});
 
 		revalidatePath("/diets");
 		revalidatePath(`/members/${data.memberId}`);
 		return { success: true };
-	} catch (_error) {
-		return { success: false, error: "Failed to create diet plan" };
+	} catch (error) {
+		console.error("Error creating diet plan:", error);
+		return { success: false, error: error instanceof Error ? error.message : "Failed to create diet plan" };
 	}
 }
 
@@ -183,14 +205,12 @@ export async function updateDietPlan(
 			},
 		});
 
-		await prisma.activityLog.create({
-			data: {
-				userId: session.user.id,
-				action: "UPDATE_DIET_PLAN",
-				entity: "DIET_PLAN",
-				entityId: plan.memberId,
-				details: `Updated diet plan: ${data.name}`,
-			},
+		await createActivityLog({
+			userId: session.user.id,
+			action: "UPDATE_DIET_PLAN",
+			entity: "DIET_PLAN",
+			entityId: plan.memberId,
+			details: `Updated diet plan: ${data.name}`,
 		});
 
 		revalidatePath("/diets");
@@ -211,14 +231,12 @@ export async function deleteDietPlan(id: string) {
 			where: { id },
 		});
 
-		await prisma.activityLog.create({
-			data: {
-				userId: session.user.id,
-				action: "DELETE_DIET_PLAN",
-				entity: "DIET_PLAN",
-				entityId: plan.memberId,
-				details: `Deleted diet plan: ${plan.name}`,
-			},
+		await createActivityLog({
+			userId: session.user.id,
+			action: "DELETE_DIET_PLAN",
+			entity: "DIET_PLAN",
+			entityId: plan.memberId,
+			details: `Deleted diet plan: ${plan.name}`,
 		});
 
 		revalidatePath("/diets");

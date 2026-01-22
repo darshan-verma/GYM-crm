@@ -116,27 +116,37 @@ export function WorkoutForm({
 		endDate: "",
 	});
 
-	const [exercises, setExercises] = useState<
-		Array<{
-			name: string;
-			sets: number;
-			reps: number;
-			weight: number;
-			restTime: number;
-			notes: string;
-		}>
-	>([
+	interface Exercise {
+		name: string;
+		sets: number;
+		reps: number;
+		weight: number;
+		restTime: number;
+		notes: string;
+	}
+
+	interface Day {
+		day: string;
+		exercises: Exercise[];
+	}
+
+	const [days, setDays] = useState<Day[]>([
 		{
-			name: "",
-			sets: 3,
-			reps: 10,
-			weight: 0,
-			restTime: 60,
-			notes: "",
+			day: "Day 1",
+			exercises: [
+				{
+					name: "",
+					sets: 3,
+					reps: 10,
+					weight: 0,
+					restTime: 60,
+					notes: "",
+				},
+			],
 		},
 	]);
 
-	const [selectedCategory, setSelectedCategory] = useState("All");
+	const [selectedCategory] = useState("All");
 	const categories = [
 		"All",
 		"Chest",
@@ -232,15 +242,22 @@ export function WorkoutForm({
 			return;
 		}
 
-		if (exercises.some((ex) => !ex.name)) {
-			setError("All exercises must have a name");
-			setLoading(false);
-			return;
+		// Validate all exercises have names
+		for (const day of days) {
+			if (day.exercises.some((ex) => !ex.name)) {
+				setError("All exercises must have a name");
+				setLoading(false);
+				return;
+			}
 		}
+
+		// Convert days structure to exercises array
+		// Format: [{day: "Day 1", exercises: [...]}, {day: "Day 2", exercises: [...]}]
+		const exercisesData = days as unknown as Exercise[];
 
 		const result = await createWorkoutPlan({
 			...formData,
-			exercises,
+			exercises: exercisesData as unknown as Parameters<typeof createWorkoutPlan>[0]['exercises'],
 			startDate: new Date(formData.startDate),
 			endDate: formData.endDate ? new Date(formData.endDate) : undefined,
 		});
@@ -254,32 +271,77 @@ export function WorkoutForm({
 		setLoading(false);
 	};
 
-	const addExercise = () => {
-		setExercises([
-			...exercises,
+	const addDay = () => {
+		const dayNumber = days.length + 1;
+		setDays([
+			...days,
 			{
-				name: "",
-				sets: 3,
-				reps: 10,
-				weight: 0,
-				restTime: 60,
-				notes: "",
+				day: `Day ${dayNumber}`,
+				exercises: [
+					{
+						name: "",
+						sets: 3,
+						reps: 10,
+						weight: 0,
+						restTime: 60,
+						notes: "",
+					},
+				],
 			},
 		]);
 	};
 
-	const removeExercise = (index: number) => {
-		setExercises(exercises.filter((_, i) => i !== index));
+	const removeDay = (dayIndex: number) => {
+		if (days.length === 1) {
+			toast.error("At least one day is required");
+			return;
+		}
+		setDays(days.filter((_, i) => i !== dayIndex));
+	};
+
+	const updateDayName = (dayIndex: number, dayName: string) => {
+		const updated = [...days];
+		updated[dayIndex] = { ...updated[dayIndex], day: dayName };
+		setDays(updated);
+	};
+
+	const addExercise = (dayIndex: number) => {
+		const updated = [...days];
+		updated[dayIndex].exercises.push({
+			name: "",
+			sets: 3,
+			reps: 10,
+			weight: 0,
+			restTime: 60,
+			notes: "",
+		});
+		setDays(updated);
+	};
+
+	const removeExercise = (dayIndex: number, exerciseIndex: number) => {
+		const updated = [...days];
+		if (updated[dayIndex].exercises.length === 1) {
+			toast.error("At least one exercise is required per day");
+			return;
+		}
+		updated[dayIndex].exercises = updated[dayIndex].exercises.filter(
+			(_, i) => i !== exerciseIndex
+		);
+		setDays(updated);
 	};
 
 	const updateExercise = (
-		index: number,
+		dayIndex: number,
+		exerciseIndex: number,
 		field: string,
 		value: string | number | string[]
 	) => {
-		const updated = [...exercises];
-		updated[index] = { ...updated[index], [field]: value };
-		setExercises(updated);
+		const updated = [...days];
+		updated[dayIndex].exercises[exerciseIndex] = {
+			...updated[dayIndex].exercises[exerciseIndex],
+			[field]: value,
+		};
+		setDays(updated);
 	};
 
 	return (
@@ -452,293 +514,296 @@ export function WorkoutForm({
 
 			<div className="border-t pt-6">
 				<div className="flex items-center justify-between mb-4">
-					<h3 className="text-lg font-semibold">Exercises</h3>
+					<h3 className="text-lg font-semibold">Workout Plan (Day-wise)</h3>
 					<div className="flex gap-2">
-						<Select
-							value={selectedCategory}
-							onValueChange={setSelectedCategory}
-						>
-							<SelectTrigger className="w-40">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								{categories.map((cat) => (
-									<SelectItem key={cat} value={cat}>
-										{cat}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-						<Button type="button" onClick={addExercise} variant="outline">
+						<Button type="button" onClick={addDay} variant="outline">
 							<Plus className="h-4 w-4 mr-2" />
-							Add Exercise
+							Add Day
 						</Button>
 					</div>
 				</div>
 
-				<div className="space-y-4">
-					{exercises.map((exercise, index) => (
-						<div key={index} className="p-4 border rounded-lg space-y-4">
-							<div className="flex items-start justify-between">
-								<div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
-									<div className="md:col-span-3">
-										<Label>Exercise Name *</Label>
-										<div className="flex gap-2">
-											<Select
-												value={exercise.name}
-												onValueChange={(value) =>
-													updateExercise(index, "name", value)
-												}
-											>
-												<SelectTrigger>
-													<SelectValue placeholder="Select exercise" />
-												</SelectTrigger>
-												<SelectContent>
-													{filteredExercises.map((ex) => (
-														<SelectItem key={ex.name} value={ex.name}>
-															{ex.name} ({ex.equipment})
-														</SelectItem>
-													))}
-												</SelectContent>
-											</Select>
-											<Dialog>
-												<DialogTrigger asChild>
-													<Button type="button" variant="outline" size="sm">
-														<Plus className="h-4 w-4 mr-1" />
-														Add Exercise
-													</Button>
-												</DialogTrigger>
-												<DialogContent>
-													<DialogHeader>
-														<DialogTitle>Add New Exercise</DialogTitle>
-														<DialogDescription>
-															Add a new exercise to the library
-														</DialogDescription>
-													</DialogHeader>
-													<div className="space-y-4">
-														<div className="space-y-2">
-															<Label htmlFor="exerciseName">
-																Exercise Name *
-															</Label>
-															<Input
-																id="exerciseName"
-																value={newExercise.name}
-																onChange={(e) =>
-																	setNewExercise((prev) => ({
-																		...prev,
-																		name: e.target.value,
-																	}))
-																}
-																placeholder="e.g. Bench Press"
-															/>
-														</div>
-														<div className="space-y-2">
-															<Label htmlFor="exerciseCategory">
-																Category *
-															</Label>
-															<Select
-																value={newExercise.category}
-																onValueChange={(value) =>
-																	setNewExercise((prev) => ({
-																		...prev,
-																		category: value,
-																	}))
-																}
+				<div className="space-y-6">
+					{days.map((day, dayIndex) => (
+						<div key={dayIndex} className="p-4 border-2 rounded-lg bg-gray-50">
+							<div className="flex items-center justify-between mb-4">
+								<div className="flex items-center gap-3">
+									<Input
+										type="text"
+										value={day.day}
+										onChange={(e) => updateDayName(dayIndex, e.target.value)}
+										className="font-semibold text-lg w-32"
+									/>
+								</div>
+								<div className="flex gap-2">
+									<Button
+										type="button"
+										onClick={() => addExercise(dayIndex)}
+										variant="outline"
+										size="sm"
+									>
+										<Plus className="h-4 w-4 mr-2" />
+										Add Exercise
+									</Button>
+									{days.length > 1 && (
+										<Button
+											type="button"
+											variant="ghost"
+											size="icon"
+											onClick={() => removeDay(dayIndex)}
+										>
+											<Trash2 className="h-4 w-4 text-red-500" />
+										</Button>
+									)}
+								</div>
+							</div>
+
+							<div className="space-y-4">
+								{day.exercises.map((exercise, exerciseIndex) => (
+									<div key={exerciseIndex} className="p-4 border rounded-lg bg-white space-y-4">
+										<div className="flex items-start justify-between">
+											<div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
+												<div className="md:col-span-3">
+													<Label>Exercise Name *</Label>
+													<div className="flex gap-2">
+														<Select
+															value={exercise.name}
+															onValueChange={(value) =>
+																updateExercise(dayIndex, exerciseIndex, "name", value)
+															}
+														>
+															<SelectTrigger>
+																<SelectValue placeholder="Select exercise" />
+															</SelectTrigger>
+															<SelectContent>
+																{filteredExercises.map((ex) => (
+																	<SelectItem key={ex.name} value={ex.name}>
+																		{ex.name} ({ex.equipment})
+																	</SelectItem>
+																))}
+															</SelectContent>
+														</Select>
+														<Dialog>
+															<DialogTrigger asChild>
+																<Button type="button" variant="outline" size="sm">
+																	<Plus className="h-4 w-4 mr-1" />
+																	New
+																</Button>
+															</DialogTrigger>
+															<DialogContent>
+																<DialogHeader>
+																	<DialogTitle>Add New Exercise</DialogTitle>
+																	<DialogDescription>
+																		Add a new exercise to the library
+																	</DialogDescription>
+																</DialogHeader>
+																<div className="space-y-4">
+																	<div className="space-y-2">
+																		<Label htmlFor="exerciseName">Exercise Name *</Label>
+																		<Input
+																			id="exerciseName"
+																			value={newExercise.name}
+																			onChange={(e) =>
+																				setNewExercise((prev) => ({
+																					...prev,
+																					name: e.target.value,
+																				}))
+																			}
+																			placeholder="e.g. Bench Press"
+																		/>
+																	</div>
+																	<div className="space-y-2">
+																		<Label htmlFor="exerciseCategory">Category *</Label>
+																		<Select
+																			value={newExercise.category}
+																			onValueChange={(value) =>
+																				setNewExercise((prev) => ({
+																					...prev,
+																					category: value,
+																				}))
+																			}
+																		>
+																			<SelectTrigger>
+																				<SelectValue />
+																			</SelectTrigger>
+																			<SelectContent>
+																				{categories
+																					.filter((cat) => cat !== "All")
+																					.map((cat) => (
+																						<SelectItem key={cat} value={cat}>
+																							{cat}
+																						</SelectItem>
+																					))}
+																			</SelectContent>
+																		</Select>
+																	</div>
+																	<div className="space-y-2">
+																		<Label htmlFor="exerciseEquipment">Equipment *</Label>
+																		<Select
+																			value={newExercise.equipment}
+																			onValueChange={(value) =>
+																				setNewExercise((prev) => ({
+																					...prev,
+																					equipment: value,
+																				}))
+																			}
+																		>
+																			<SelectTrigger>
+																				<SelectValue />
+																			</SelectTrigger>
+																			<SelectContent>
+																				<SelectItem value="Bodyweight">Bodyweight</SelectItem>
+																				<SelectItem value="Barbell">Barbell</SelectItem>
+																				<SelectItem value="Dumbbell">Dumbbell</SelectItem>
+																				<SelectItem value="Cable">Cable</SelectItem>
+																				<SelectItem value="Machine">Machine</SelectItem>
+																				<SelectItem value="Equipment">Equipment</SelectItem>
+																			</SelectContent>
+																		</Select>
+																	</div>
+																	<div className="space-y-2">
+																		<Label htmlFor="exerciseDifficulty">Difficulty *</Label>
+																		<Select
+																			value={newExercise.difficulty}
+																			onValueChange={(value) =>
+																				setNewExercise((prev) => ({
+																					...prev,
+																					difficulty: value,
+																				}))
+																			}
+																		>
+																			<SelectTrigger>
+																				<SelectValue />
+																			</SelectTrigger>
+																			<SelectContent>
+																				<SelectItem value="BEGINNER">Beginner</SelectItem>
+																				<SelectItem value="INTERMEDIATE">Intermediate</SelectItem>
+																				<SelectItem value="ADVANCED">Advanced</SelectItem>
+																			</SelectContent>
+																		</Select>
+																	</div>
+																</div>
+																<DialogFooter>
+																	<Button
+																		type="button"
+																		variant="outline"
+																		onClick={() => {
+																			setNewExercise({
+																				name: "",
+																				category: "Chest",
+																				equipment: "Bodyweight",
+																				difficulty: "BEGINNER",
+																			});
+																		}}
+																	>
+																		Cancel
+																	</Button>
+																	<Button
+																		type="button"
+																		onClick={handleAddExercise}
+																		disabled={!newExercise.name.trim()}
+																	>
+																		Add Exercise
+																	</Button>
+																</DialogFooter>
+															</DialogContent>
+														</Dialog>
+														{day.exercises.length > 1 && (
+															<Button
+																type="button"
+																variant="ghost"
+																size="icon"
+																onClick={() => removeExercise(dayIndex, exerciseIndex)}
 															>
-																<SelectTrigger>
-																	<SelectValue />
-																</SelectTrigger>
-																<SelectContent>
-																	{categories
-																		.filter((cat) => cat !== "All")
-																		.map((cat) => (
-																			<SelectItem key={cat} value={cat}>
-																				{cat}
-																			</SelectItem>
-																		))}
-																</SelectContent>
-															</Select>
-														</div>
-														<div className="space-y-2">
-															<Label htmlFor="exerciseEquipment">
-																Equipment *
-															</Label>
-															<Select
-																value={newExercise.equipment}
-																onValueChange={(value) =>
-																	setNewExercise((prev) => ({
-																		...prev,
-																		equipment: value,
-																	}))
-																}
-															>
-																<SelectTrigger>
-																	<SelectValue />
-																</SelectTrigger>
-																<SelectContent>
-																	<SelectItem value="Bodyweight">
-																		Bodyweight
-																	</SelectItem>
-																	<SelectItem value="Barbell">
-																		Barbell
-																	</SelectItem>
-																	<SelectItem value="Dumbbell">
-																		Dumbbell
-																	</SelectItem>
-																	<SelectItem value="Cable">Cable</SelectItem>
-																	<SelectItem value="Machine">
-																		Machine
-																	</SelectItem>
-																	<SelectItem value="Equipment">
-																		Equipment
-																	</SelectItem>
-																</SelectContent>
-															</Select>
-														</div>
-														<div className="space-y-2">
-															<Label htmlFor="exerciseDifficulty">
-																Difficulty *
-															</Label>
-															<Select
-																value={newExercise.difficulty}
-																onValueChange={(value) =>
-																	setNewExercise((prev) => ({
-																		...prev,
-																		difficulty: value,
-																	}))
-																}
-															>
-																<SelectTrigger>
-																	<SelectValue />
-																</SelectTrigger>
-																<SelectContent>
-																	<SelectItem value="BEGINNER">
-																		Beginner
-																	</SelectItem>
-																	<SelectItem value="INTERMEDIATE">
-																		Intermediate
-																	</SelectItem>
-																	<SelectItem value="ADVANCED">
-																		Advanced
-																	</SelectItem>
-																</SelectContent>
-															</Select>
-														</div>
+																<Trash2 className="h-4 w-4 text-red-500" />
+															</Button>
+														)}
 													</div>
-													<DialogFooter>
-														<Button
-															type="button"
-															variant="outline"
-															onClick={() => {
-																setNewExercise({
-																	name: "",
-																	category: "Chest",
-																	equipment: "Bodyweight",
-																	difficulty: "BEGINNER",
-																});
-															}}
-														>
-															Cancel
-														</Button>
-														<Button
-															type="button"
-															onClick={handleAddExercise}
-															disabled={!newExercise.name.trim()}
-														>
-															Add Exercise
-														</Button>
-													</DialogFooter>
-												</DialogContent>
-											</Dialog>
-											{exercises.length > 1 && (
-												<Button
-													type="button"
-													variant="ghost"
-													size="icon"
-													onClick={() => removeExercise(index)}
-												>
-													<Trash2 className="h-4 w-4 text-red-500" />
-												</Button>
-											)}
+												</div>
+
+												<div>
+													<Label>Sets</Label>
+													<Input
+														type="number"
+														min="1"
+														value={exercise.sets}
+														onChange={(e) =>
+															updateExercise(
+																dayIndex,
+																exerciseIndex,
+																"sets",
+																parseInt(e.target.value) || 0
+															)
+														}
+													/>
+												</div>
+
+												<div>
+													<Label>Reps</Label>
+													<Input
+														type="number"
+														min="1"
+														value={exercise.reps}
+														onChange={(e) =>
+															updateExercise(
+																dayIndex,
+																exerciseIndex,
+																"reps",
+																parseInt(e.target.value) || 0
+															)
+														}
+													/>
+												</div>
+
+												<div>
+													<Label>Weight (kg)</Label>
+													<Input
+														type="number"
+														min="0"
+														step="0.5"
+														value={exercise.weight}
+														onChange={(e) =>
+															updateExercise(
+																dayIndex,
+																exerciseIndex,
+																"weight",
+																parseFloat(e.target.value) || 0
+															)
+														}
+													/>
+												</div>
+
+												<div className="md:col-span-2">
+													<Label>Rest Time (seconds)</Label>
+													<Input
+														type="number"
+														min="0"
+														value={exercise.restTime}
+														onChange={(e) =>
+															updateExercise(
+																dayIndex,
+																exerciseIndex,
+																"restTime",
+																parseInt(e.target.value) || 0
+															)
+														}
+													/>
+												</div>
+
+												<div className="md:col-span-3">
+													<Label>Notes</Label>
+													<Input
+														value={exercise.notes}
+														onChange={(e) =>
+															updateExercise(dayIndex, exerciseIndex, "notes", e.target.value)
+														}
+														placeholder="Form tips, modifications, etc."
+													/>
+												</div>
+											</div>
 										</div>
 									</div>
-
-									<div>
-										<Label>Sets</Label>
-										<Input
-											type="number"
-											min="1"
-											value={exercise.sets}
-											onChange={(e) =>
-												updateExercise(
-													index,
-													"sets",
-													parseInt(e.target.value) || 0
-												)
-											}
-										/>
-									</div>
-
-									<div>
-										<Label>Reps</Label>
-										<Input
-											type="number"
-											min="1"
-											value={exercise.reps}
-											onChange={(e) =>
-												updateExercise(
-													index,
-													"reps",
-													parseInt(e.target.value) || 0
-												)
-											}
-										/>
-									</div>
-
-									<div>
-										<Label>Weight (kg)</Label>
-										<Input
-											type="number"
-											min="0"
-											step="0.5"
-											value={exercise.weight}
-											onChange={(e) =>
-												updateExercise(
-													index,
-													"weight",
-													parseFloat(e.target.value) || 0
-												)
-											}
-										/>
-									</div>
-
-									<div className="md:col-span-2">
-										<Label>Rest Time (seconds)</Label>
-										<Input
-											type="number"
-											min="0"
-											value={exercise.restTime}
-											onChange={(e) =>
-												updateExercise(
-													index,
-													"restTime",
-													parseInt(e.target.value) || 0
-												)
-											}
-										/>
-									</div>
-
-									<div className="md:col-span-3">
-										<Label>Notes</Label>
-										<Input
-											value={exercise.notes}
-											onChange={(e) =>
-												updateExercise(index, "notes", e.target.value)
-											}
-											placeholder="Form tips, modifications, etc."
-										/>
-									</div>
-								</div>
+								))}
 							</div>
 						</div>
 					))}

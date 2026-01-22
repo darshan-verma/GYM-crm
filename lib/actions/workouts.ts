@@ -4,6 +4,7 @@ import prisma from "@/lib/db/prisma";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
+import { createActivityLog } from "@/lib/utils/activityLog";
 
 interface Exercise {
 	name: string;
@@ -79,27 +80,30 @@ export async function createWorkoutPlan(data: {
 	if (!session) throw new Error("Unauthorized");
 
 	try {
-		await prisma.workoutPlan.create({
+		const workoutPlan = await prisma.workoutPlan.create({
 			data: {
 				...data,
 				exercises: data.exercises as unknown as Prisma.InputJsonValue,
 			},
 		});
 
-		await prisma.activityLog.create({
-			data: {
-				userId: session.user.id,
-				action: "CREATE_WORKOUT_PLAN",
-				entity: "WORKOUT_PLAN",
-				entityId: data.memberId,
-				details: `Created workout plan: ${data.name}`,
+		// Log activity (don't fail if logging fails)
+		await createActivityLog({
+			userId: session.user.id,
+			action: "CREATE",
+			entity: "WorkoutPlan",
+			entityId: workoutPlan.id,
+			details: {
+				name: workoutPlan.name,
+				memberId: data.memberId,
 			},
 		});
 
 		revalidatePath("/workouts");
 		revalidatePath(`/members/${data.memberId}`);
 		return { success: true };
-	} catch (_error) {
+	} catch (error) {
+		console.error("Create workout plan error:", error);
 		return { success: false, error: "Failed to create workout plan" };
 	}
 }
@@ -143,13 +147,15 @@ export async function updateWorkoutPlan(
 			data: updateData,
 		});
 
-		await prisma.activityLog.create({
-			data: {
-				userId: session.user.id,
-				action: "UPDATE_WORKOUT_PLAN",
-				entity: "WORKOUT_PLAN",
-				entityId: plan.memberId,
-				details: `Updated workout plan: ${data.name}`,
+		// Log activity (don't fail if logging fails)
+		await createActivityLog({
+			userId: session.user.id,
+			action: "UPDATE",
+			entity: "WorkoutPlan",
+			entityId: plan.id,
+			details: {
+				name: plan.name,
+				memberId: plan.memberId,
 			},
 		});
 
@@ -171,13 +177,15 @@ export async function deleteWorkoutPlan(id: string) {
 			where: { id },
 		});
 
-		await prisma.activityLog.create({
-			data: {
-				userId: session.user.id,
-				action: "DELETE_WORKOUT_PLAN",
-				entity: "WORKOUT_PLAN",
-				entityId: plan.memberId,
-				details: `Deleted workout plan: ${plan.name}`,
+		// Log activity (don't fail if logging fails)
+		await createActivityLog({
+			userId: session.user.id,
+			action: "DELETE",
+			entity: "WorkoutPlan",
+			entityId: plan.id,
+			details: {
+				name: plan.name,
+				memberId: plan.memberId,
 			},
 		});
 
