@@ -86,7 +86,9 @@ export default function DietForm({
 	const [dietTypes, setDietTypes] = useState(initialDietTypes);
 	const [showAddType, setShowAddType] = useState(false);
 	const [newTypeName, setNewTypeName] = useState("");
-	const [foods, setFoods] = useState(initialFoods);
+	const [foods, setFoods] = useState(
+		[...initialFoods].sort((a, b) => a.name.localeCompare(b.name))
+	);
 	const [foodCategories, setFoodCategories] = useState(initialCategories);
 	const [showAddFood, setShowAddFood] = useState(false);
 	const [newFoodData, setNewFoodData] = useState({
@@ -145,7 +147,7 @@ export default function DietForm({
 					// Refresh the foods and categories
 					Promise.all([getFoods(), getFoodCategories()]).then(
 						([foodsData, categoriesData]) => {
-							setFoods(foodsData);
+							setFoods(foodsData.sort((a, b) => a.name.localeCompare(b.name)));
 							setFoodCategories(categoriesData);
 						}
 					);
@@ -200,7 +202,7 @@ export default function DietForm({
 				fat: Number(result.fat),
 			};
 
-			setFoods((prev) => [...prev, transformedResult]);
+			setFoods((prev) => [...prev, transformedResult].sort((a, b) => a.name.localeCompare(b.name)));
 			// Update categories if new category was added
 			if (!foodCategories.includes(result.category)) {
 				setFoodCategories((prev) => [...prev, result.category].sort());
@@ -239,10 +241,11 @@ export default function DietForm({
 
 	const categories = ["ALL", ...foodCategories];
 
-	const filteredFoods =
+	const filteredFoods = (
 		selectedCategory === "ALL"
 			? foods
-			: foods.filter((food) => food.category === selectedCategory);
+			: foods.filter((food) => food.category === selectedCategory)
+	).sort((a, b) => a.name.localeCompare(b.name));
 
 	const addDay = () => {
 		const dayNumber = days.length + 1;

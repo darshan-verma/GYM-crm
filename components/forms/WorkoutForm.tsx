@@ -67,7 +67,9 @@ export function WorkoutForm({
 	const [fitnessGoals, setFitnessGoals] = useState(initialFitnessGoals);
 	const [showAddGoal, setShowAddGoal] = useState(false);
 	const [newGoalName, setNewGoalName] = useState("");
-	const [exercisesList, setExercisesList] = useState(initialExercises);
+	const [exercisesList, setExercisesList] = useState(
+		[...initialExercises].sort((a, b) => a.name.localeCompare(b.name))
+	);
 	const [newExercise, setNewExercise] = useState({
 		name: "",
 		category: "Chest",
@@ -100,7 +102,9 @@ export function WorkoutForm({
 			seedDefaultExercises()
 				.then(() => {
 					// Refresh the exercises
-					getExercises().then(setExercisesList);
+					getExercises().then((exercises) => {
+						setExercisesList(exercises.sort((a, b) => a.name.localeCompare(b.name)));
+					});
 				})
 				.catch(console.error);
 		}
@@ -198,7 +202,7 @@ export function WorkoutForm({
 				difficulty: newExercise.difficulty,
 			});
 
-			setExercisesList((prev) => [...prev, result]);
+			setExercisesList((prev) => [...prev, result].sort((a, b) => a.name.localeCompare(b.name)));
 			setNewExercise({
 				name: "",
 				category: "Chest",
@@ -226,10 +230,11 @@ export function WorkoutForm({
 		),
 	];
 
-	const filteredExercises =
+	const filteredExercises = (
 		selectedCategory === "All"
 			? allExercises
-			: allExercises.filter((ex) => ex.category === selectedCategory);
+			: allExercises.filter((ex) => ex.category === selectedCategory)
+	).sort((a, b) => a.name.localeCompare(b.name));
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();

@@ -137,10 +137,11 @@ export default function DietEditForm({
 		"SNACKS",
 	];
 
-	const filteredFoods =
+	const filteredFoods = (
 		selectedCategory === "ALL"
 			? foodDatabase
-			: foodDatabase.filter((food) => food.category === selectedCategory);
+			: foodDatabase.filter((food) => food.category === selectedCategory)
+	).sort((a, b) => a.name.localeCompare(b.name));
 
 	const addDay = () => {
 		const dayNumber = days.length + 1;
