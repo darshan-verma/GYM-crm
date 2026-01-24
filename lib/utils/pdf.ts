@@ -20,6 +20,8 @@ interface InvoiceData {
 	gstNumber?: string;
 	gstPercentage?: number;
 	gstAmount?: number;
+	nextDueAmount?: number;
+	nextDueDate?: Date;
 }
 
 export function generateInvoicePDF(data: InvoiceData) {
@@ -99,6 +101,14 @@ export function generateInvoicePDF(data: InvoiceData) {
 
 	if (data.transactionId) {
 		paymentDetails.push(["Transaction ID", data.transactionId]);
+	}
+
+	if (data.nextDueAmount) {
+		paymentDetails.push(["Next Payment Due", `₹${data.nextDueAmount.toFixed(2)}`]);
+	}
+
+	if (data.nextDueDate) {
+		paymentDetails.push(["Next Due Date", new Date(data.nextDueDate).toLocaleDateString("en-IN")]);
 	}
 
 	if (data.gstNumber) {
@@ -297,6 +307,14 @@ export function generateInvoicePDFBlob(data: InvoiceData): Blob {
 
 	if (data.transactionId) {
 		paymentDetails.push(["Transaction ID", data.transactionId]);
+	}
+
+	if (data.nextDueAmount) {
+		paymentDetails.push(["Next Payment Due", `₹${data.nextDueAmount.toFixed(2)}`]);
+	}
+
+	if (data.nextDueDate) {
+		paymentDetails.push(["Next Due Date", new Date(data.nextDueDate).toLocaleDateString("en-IN")]);
 	}
 
 	if (data.gstNumber) {

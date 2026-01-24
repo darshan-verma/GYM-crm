@@ -15,6 +15,8 @@ export async function createPayment(data: {
 	gstNumber?: string;
 	gstPercentage?: number;
 	discount?: number;
+	nextDueAmount?: number;
+	nextDueDate?: Date;
 }) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
@@ -171,9 +173,11 @@ export async function createPayment(data: {
 				gstPercentage: data.gstPercentage,
 				gstAmount: gstAmount,
 				discount: discountAmount > 0 ? discountAmount : null,
+				nextDueAmount: data.nextDueAmount,
+				nextDueDate: data.nextDueDate,
 				createdBy: session.user.id,
 				paymentDate: new Date(),
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Prisma types are stale; discount field exists in schema
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Prisma types are stale; nextDueAmount and nextDueDate fields exist in schema
 			} as any,
 			include: {
 				member: true,

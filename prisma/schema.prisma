@@ -247,6 +247,8 @@ model Payment {
   gstPercentage   Decimal?    @db.Decimal(5, 2)
   gstAmount       Decimal?    @db.Decimal(10, 2)
   discount        Decimal?    @db.Decimal(10, 2)
+  nextDueAmount   Decimal?    @db.Decimal(10, 2)
+  nextDueDate     DateTime?
   createdBy       String?
   createdAt       DateTime    @default(now())
 

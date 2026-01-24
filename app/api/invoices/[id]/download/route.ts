@@ -65,6 +65,10 @@ export async function GET(
 			gstAmount: payment.gstAmount
 				? parseFloat(payment.gstAmount.toString())
 				: undefined,
+			nextDueAmount: (payment as unknown as { nextDueAmount?: unknown }).nextDueAmount
+				? parseFloat(String((payment as unknown as { nextDueAmount?: unknown }).nextDueAmount))
+				: undefined,
+			nextDueDate: (payment as unknown as { nextDueDate?: unknown }).nextDueDate as Date || undefined,
 		});
 
 		// Convert blob to buffer

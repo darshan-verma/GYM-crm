@@ -29,6 +29,8 @@ interface PaymentWithMember {
 	gstPercentage: number | null;
 	gstAmount: number | null;
 	discount: number | null;
+	nextDueAmount: number | null;
+	nextDueDate: Date | null;
 	createdBy: string | null;
 	createdAt: Date;
 	member: {
@@ -183,6 +185,22 @@ export default async function InvoiceDetailPage({
 								<div className="flex justify-between">
 									<span className="text-gray-600">GST Percentage:</span>
 									<span className="font-medium">{payment.gstPercentage}%</span>
+								</div>
+							)}
+							{payment.nextDueAmount && (
+								<div className="flex justify-between">
+									<span className="text-gray-600">Next Payment Due:</span>
+									<span className="font-medium text-orange-600">
+										{formatCurrency(Number(payment.nextDueAmount))}
+									</span>
+								</div>
+							)}
+							{payment.nextDueDate && (
+								<div className="flex justify-between">
+									<span className="text-gray-600">Next Due Date:</span>
+									<span className="font-medium text-orange-600">
+										{new Date(payment.nextDueDate).toLocaleDateString()}
+									</span>
 								</div>
 							)}
 						</div>

@@ -113,25 +113,24 @@ export default async function BillingPage() {
 				<CardContent>
 					<div className="space-y-4">
 						{paymentsData.payments.slice(0, 10).map((payment) => (
-							<div
-								key={payment.id}
-								className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/50 transition-colors"
-							>
-								<div className="flex-1">
-									<p className="font-medium">{payment.member.name}</p>
-									<p className="text-sm text-muted-foreground">
-										{payment.invoiceNumber} • {payment.member.membershipNumber}
-									</p>
+							<Link key={payment.id} href={`/billing/invoices/${payment.id}`}>
+								<div className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer">
+									<div className="flex-1">
+										<p className="font-medium">{payment.member.name}</p>
+										<p className="text-sm text-muted-foreground">
+											{payment.invoiceNumber} • {payment.member.membershipNumber}
+										</p>
+									</div>
+									<div className="text-right">
+										<p className="font-bold text-green-600">
+											{formatCurrency(Number(payment.amount))}
+										</p>
+										<p className="text-xs text-muted-foreground">
+											{payment.paymentMode}
+										</p>
+									</div>
 								</div>
-								<div className="text-right">
-									<p className="font-bold text-green-600">
-										{formatCurrency(Number(payment.amount))}
-									</p>
-									<p className="text-xs text-muted-foreground">
-										{payment.paymentMode}
-									</p>
-								</div>
-							</div>
+							</Link>
 						))}
 					</div>
 				</CardContent>

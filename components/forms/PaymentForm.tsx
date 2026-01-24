@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createPayment } from "@/lib/actions/payments";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,8 @@ export default function PaymentForm({
 	const [amount, setAmount] = useState<string>("");
 	const [discount, setDiscount] = useState<string>("");
 	const [gstPercentage, setGstPercentage] = useState<string>("");
+	const [nextDueAmount, setNextDueAmount] = useState<string>("");
+	const [nextDueDate, setNextDueDate] = useState<string>("");
 
 	const baseAmount = parseFloat(amount) || 0;
 	const discountAmount = parseFloat(discount) || 0;
@@ -118,6 +120,12 @@ export default function PaymentForm({
 			discount: formData.get("discount")
 				? parseFloat(formData.get("discount") as string)
 				: undefined,
+			nextDueAmount: formData.get("nextDueAmount")
+				? parseFloat(formData.get("nextDueAmount") as string)
+				: undefined,
+			nextDueDate: formData.get("nextDueDate")
+				? new Date(formData.get("nextDueDate") as string)
+				: undefined,
 		};
 
 		try {
@@ -166,6 +174,23 @@ export default function PaymentForm({
 	const remainingBaseDue = activeMembership
 		? baseDue - totalDiscounts - totalPaymentsExcludingGST
 		: null;
+
+	// Auto-calculate next due amount when base amount or discount changes
+	useEffect(() => {
+		if (remainingBaseDue !== null && baseAmount > 0) {
+			const amountAfterDiscount = Math.max(0, baseAmount - discountAmount);
+			const calculatedRemaining = Math.max(0, remainingBaseDue - amountAfterDiscount);
+
+			// Only auto-fill if there's actually a remaining balance
+			if (calculatedRemaining > 0) {
+				setNextDueAmount(calculatedRemaining.toFixed(2));
+			} else {
+				setNextDueAmount(""); // Clear if no remaining balance
+			}
+		} else {
+			setNextDueAmount(""); // Clear if no membership or no amount entered
+		}
+	}, [baseAmount, discountAmount, remainingBaseDue]);
 
 	return (
 		<form onSubmit={handleSubmit} className="space-y-6">
@@ -367,6 +392,40 @@ export default function PaymentForm({
 						value={gstPercentage}
 						onChange={(e) => setGstPercentage(e.target.value)}
 						disabled={loading}
+					/>
+				</div>
+
+				{/* Next Payment Due Amount */}
+				<div className="space-y-2">
+					<Label htmlFor="nextDueAmount">Next Payment Due Amount (Auto-calculated)</Label>
+					<Input
+						id="nextDueAmount"
+						name="nextDueAmount"
+						type="number"
+						step="0.01"
+						min="0"
+						placeholder="0.00"
+						value={nextDueAmount}
+						onChange={(e) => setNextDueAmount(e.target.value)}
+						disabled={loading}
+						className="bg-blue-50"
+					/>
+					<p className="text-xs text-muted-foreground">
+						Automatically calculated based on remaining balance after this payment. You can override this value.
+					</p>
+				</div>
+
+				{/* Next Payment Due Date */}
+				<div className="space-y-2">
+					<Label htmlFor="nextDueDate">Next Payment Due Date (Optional)</Label>
+					<Input
+						id="nextDueDate"
+						name="nextDueDate"
+						type="date"
+						value={nextDueDate}
+						onChange={(e) => setNextDueDate(e.target.value)}
+						disabled={loading}
+						min={new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]} // Tomorrow minimum
 					/>
 				</div>
 
