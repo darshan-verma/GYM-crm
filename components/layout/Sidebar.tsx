@@ -35,6 +35,12 @@ const navigation = [
 		permission: Permission.VIEW_DASHBOARD,
 	},
 	{
+		name: "Leads",
+		href: "/leads",
+		icon: Megaphone,
+		permission: Permission.VIEW_LEADS,
+	},
+	{
 		name: "Members",
 		href: "/members",
 		icon: Users,
@@ -64,12 +70,7 @@ const navigation = [
 		icon: Calendar,
 		permission: Permission.VIEW_ATTENDANCE,
 	},
-	{
-		name: "Leads",
-		href: "/leads",
-		icon: Megaphone,
-		permission: Permission.VIEW_LEADS,
-	},
+	
 	{
 		name: "Memberships",
 		href: "/memberships",
