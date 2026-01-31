@@ -1,6 +1,14 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
+export interface GymProfileForPDF {
+	name: string;
+	description?: string | null;
+	address?: string | null;
+	phone?: string | null;
+	email?: string | null;
+}
+
 interface InvoiceData {
 	invoiceNumber: string;
 	paymentDate: Date;
@@ -22,6 +30,19 @@ interface InvoiceData {
 	gstAmount?: number;
 	nextDueAmount?: number;
 	nextDueDate?: Date;
+	gymProfile?: GymProfileForPDF | null;
+}
+
+function getInvoiceHeaderLines(data: InvoiceData) {
+	const gym = data.gymProfile;
+	const name = gym?.name ?? "Pro Bodyline Fitness";
+	const tagline = gym?.description ?? "Complete Gym Management System";
+	const contactLine = [gym?.email, gym?.phone].filter(Boolean).join(" | ");
+	const contact: string[] = [
+		contactLine || "Email: info@probodyline.com | Phone: +91 9876543210",
+		gym?.address ?? "Address: 123 Fitness Street, Gym City, GC 12345",
+	];
+	return { name, tagline, contact };
 }
 
 export function generateInvoicePDF(data: InvoiceData) {
@@ -30,16 +51,18 @@ export function generateInvoicePDF(data: InvoiceData) {
 	// Set font
 	doc.setFont("helvetica");
 
+	const header = getInvoiceHeaderLines(data);
+
 	// Header - Company Logo and Name
 	doc.setFontSize(24);
 	doc.setTextColor(37, 99, 235); // Blue color
-	doc.text("Pro Bodyline Fitness", 20, 20);
+	doc.text(header.name, 20, 20);
 
 	doc.setFontSize(10);
 	doc.setTextColor(100, 100, 100);
-	doc.text("Complete Gym Management System", 20, 27);
-	doc.text("Email: info@probodyline.com | Phone: +91 9876543210", 20, 32);
-	doc.text("Address: 123 Fitness Street, Gym City, GC 12345", 20, 37);
+	doc.text(header.tagline, 20, 27);
+	doc.text(header.contact[0], 20, 32);
+	if (header.contact[1]) doc.text(header.contact[1], 20, 37);
 
 	// Draw line
 	doc.setDrawColor(200, 200, 200);
@@ -219,8 +242,10 @@ export function generateInvoicePDF(data: InvoiceData) {
 		footerY + 12,
 		{ align: "center" }
 	);
+	const footerContact =
+		data.gymProfile?.email ?? "info@probodyline.com";
 	doc.text(
-		"For any queries, please contact us at info@probodyline.com",
+		`For any queries, please contact us at ${footerContact}`,
 		105,
 		footerY + 17,
 		{ align: "center" }
@@ -239,19 +264,19 @@ export function generateInvoicePDF(data: InvoiceData) {
 // Export invoice as blob for server-side usage
 export function generateInvoicePDFBlob(data: InvoiceData): Blob {
 	const doc = new jsPDF();
+	const header = getInvoiceHeaderLines(data);
 
-	// Same PDF generation logic as above
 	doc.setFont("helvetica");
 
 	doc.setFontSize(24);
 	doc.setTextColor(37, 99, 235);
-	doc.text("Pro Bodyline Fitness", 20, 20);
+	doc.text(header.name, 20, 20);
 
 	doc.setFontSize(10);
 	doc.setTextColor(100, 100, 100);
-	doc.text("Complete Gym Management System", 20, 27);
-	doc.text("Email: info@probodyline.com | Phone: +91 9876543210", 20, 32);
-	doc.text("Address: 123 Fitness Street, Gym City, GC 12345", 20, 37);
+	doc.text(header.tagline, 20, 27);
+	doc.text(header.contact[0], 20, 32);
+	if (header.contact[1]) doc.text(header.contact[1], 20, 37);
 
 	doc.setDrawColor(200, 200, 200);
 	doc.line(20, 42, 190, 42);
@@ -421,8 +446,10 @@ export function generateInvoicePDFBlob(data: InvoiceData): Blob {
 		footerY + 12,
 		{ align: "center" }
 	);
+	const footerContact =
+		data.gymProfile?.email ?? "info@probodyline.com";
 	doc.text(
-		"For any queries, please contact us at info@probodyline.com",
+		`For any queries, please contact us at ${footerContact}`,
 		105,
 		footerY + 17,
 		{ align: "center" }

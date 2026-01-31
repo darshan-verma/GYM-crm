@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/db/prisma";
 import { generateInvoicePDFBlob } from "@/lib/utils/pdf";
+import { getActiveGymProfile } from "@/lib/actions/gym-profiles";
 
 export async function GET(
 	request: Request,
@@ -37,8 +38,19 @@ export async function GET(
 			},
 		});
 
+		const gymProfile = await getActiveGymProfile();
+
 		// Generate PDF
 		const pdfBlob = generateInvoicePDFBlob({
+			gymProfile: gymProfile
+				? {
+						name: gymProfile.name,
+						description: gymProfile.description,
+						address: gymProfile.address,
+						phone: gymProfile.phone,
+						email: gymProfile.email,
+					}
+				: undefined,
 			invoiceNumber: payment.invoiceNumber,
 			paymentDate: payment.paymentDate,
 			memberName: payment.member.name,

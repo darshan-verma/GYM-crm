@@ -1,4 +1,5 @@
 import { getPayment } from "@/lib/actions/payments";
+import { getActiveGymProfile } from "@/lib/actions/gym-profiles";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
@@ -60,7 +61,10 @@ export default async function InvoiceDetailPage({
 	params: Promise<{ id: string }>;
 }) {
 	const { id } = await params;
-	const paymentData = await getPayment(id);
+	const [paymentData, gymProfile] = await Promise.all([
+		getPayment(id),
+		getActiveGymProfile(),
+	]);
 
 	if (!paymentData) {
 		notFound();
@@ -68,6 +72,11 @@ export default async function InvoiceDetailPage({
 
 	// Serialize the payment data to convert Decimal objects to plain numbers
 	const payment = JSON.parse(JSON.stringify(paymentData)) as PaymentWithMember;
+	const gymName = gymProfile?.name ?? "Pro Bodyline";
+	const gymDescription = gymProfile?.description ?? "Fitness & Wellness Center";
+	const gymAddress = gymProfile?.address ?? "123 Fitness Street, Gym City, GC 12345";
+	const gymPhone = gymProfile?.phone ?? "+1 (555) 123-4567";
+	const gymEmail = gymProfile?.email ?? "contact@probodyline.com";
 
 	return (
 		<div className="space-y-6">
@@ -97,22 +106,28 @@ export default async function InvoiceDetailPage({
 				<div className="flex justify-between items-start mb-8 pb-8 border-b">
 					<div>
 						<h2 className="text-3xl font-bold text-gray-900 mb-2">
-							Pro Bodyline
+							{gymName}
 						</h2>
 						<div className="text-sm text-gray-600 space-y-1">
-							<p>Fitness & Wellness Center</p>
-							<div className="flex items-center gap-2">
-								<MapPin className="h-4 w-4" />
-								123 Fitness Street, Gym City, GC 12345
-							</div>
-							<div className="flex items-center gap-2">
-								<Phone className="h-4 w-4" />
-								+1 (555) 123-4567
-							</div>
-							<div className="flex items-center gap-2">
-								<Mail className="h-4 w-4" />
-								contact@probodyline.com
-							</div>
+							{gymDescription && <p>{gymDescription}</p>}
+							{gymAddress && (
+								<div className="flex items-center gap-2">
+									<MapPin className="h-4 w-4" />
+									{gymAddress}
+								</div>
+							)}
+							{gymPhone && (
+								<div className="flex items-center gap-2">
+									<Phone className="h-4 w-4" />
+									{gymPhone}
+								</div>
+							)}
+							{gymEmail && (
+								<div className="flex items-center gap-2">
+									<Mail className="h-4 w-4" />
+									{gymEmail}
+								</div>
+							)}
 						</div>
 					</div>
 					<div className="text-right">
@@ -380,8 +395,8 @@ export default async function InvoiceDetailPage({
 				<div className="pt-8 border-t text-center text-sm text-gray-600">
 					<p className="mb-2">Thank you for your payment!</p>
 					<p>
-						For questions about this invoice, please contact us at
-						contact@probodyline.com
+						For questions about this invoice, please contact us at{" "}
+						{gymEmail}
 					</p>
 				</div>
 			</div>

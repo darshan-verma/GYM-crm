@@ -1,10 +1,12 @@
 import { StaffForm } from "@/components/forms/StaffForm";
+import { getRoles } from "@/lib/actions/roles";
 import { auth } from "@/lib/auth";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 export default async function NewStaffPage() {
 	const session = await auth();
+	const roles = await getRoles();
 
 	return (
 		<div className="space-y-6">
@@ -23,7 +25,7 @@ export default async function NewStaffPage() {
 			</div>
 
 			<div className="bg-white p-6 rounded-lg shadow">
-				<StaffForm userRole={session?.user?.role} />
+				<StaffForm userRole={session?.user?.role} roles={roles} />
 			</div>
 		</div>
 	);

@@ -15,6 +15,7 @@ enum UserRole {
   TRAINER
   RECEPTIONIST
   HELPER
+  CUSTOM
 }
 
 enum Permission {
@@ -126,19 +127,32 @@ enum InAppNotificationStatus {
   DISMISSED
 }
 
+model Role {
+  id                 String       @id @default(cuid())
+  name               String       @unique
+  description        String?
+  defaultPermissions Permission[]
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  users User[]
+}
+
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  name      String
-  role      UserRole @default(RECEPTIONIST)
-  permissions Permission[]
-  phone     String?
-  avatar    String?
-  active    Boolean  @default(true)
-  lastLogin DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  email        String   @unique
+  password     String
+  name         String
+  role         UserRole @default(RECEPTIONIST)
+  customRoleId String?
+  customRole   Role?    @relation(fields: [customRoleId], references: [id], onDelete: SetNull)
+  permissions  Permission[]
+  phone        String?
+  avatar       String?
+  active       Boolean  @default(true)
+  lastLogin    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   trainedMembers Member[]      @relation("TrainerMembers")
   activityLogs   ActivityLog[]
@@ -402,6 +416,19 @@ model SystemSettings {
   updatedAt DateTime @updatedAt
 
   @@index([key])
+}
+
+model GymProfile {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  address     String?
+  phone       String?
+  email       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
 }
 
 model DietType {

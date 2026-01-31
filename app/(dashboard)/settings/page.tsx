@@ -15,7 +15,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { User, Bell, Shield, Palette } from "lucide-react";
+import { User, Bell, Shield, Palette, Building2 } from "lucide-react";
+import { getGymProfiles, getActiveGymProfileId } from "@/lib/actions/gym-profiles";
+import GymProfilesSection from "@/components/settings/GymProfilesSection";
 
 export default async function SettingsPage() {
 	const session = await auth();
@@ -28,6 +30,11 @@ export default async function SettingsPage() {
 		redirect("/");
 	}
 
+	const [profiles, activeId] = await Promise.all([
+		getGymProfiles(),
+		getActiveGymProfileId(),
+	]);
+
 	return (
 		<div className="space-y-6">
 			{/* Header */}
@@ -39,8 +46,12 @@ export default async function SettingsPage() {
 			</div>
 
 			{/* Settings Tabs */}
-			<Tabs defaultValue="profile" className="space-y-6">
+			<Tabs defaultValue="gym-profiles" className="space-y-6">
 				<TabsList>
+					<TabsTrigger value="gym-profiles">
+						<Building2 className="w-4 h-4 mr-2" />
+						Gym Profiles
+					</TabsTrigger>
 					<TabsTrigger value="profile">
 						<User className="w-4 h-4 mr-2" />
 						Profile
@@ -58,6 +69,11 @@ export default async function SettingsPage() {
 						Appearance
 					</TabsTrigger>
 				</TabsList>
+
+				{/* Gym Profiles Tab */}
+				<TabsContent value="gym-profiles" className="space-y-6">
+					<GymProfilesSection profiles={profiles} activeId={activeId} />
+				</TabsContent>
 
 				{/* Profile Tab */}
 				<TabsContent value="profile" className="space-y-6">

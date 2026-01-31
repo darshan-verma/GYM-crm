@@ -22,6 +22,8 @@ export async function getUsers() {
 			name: true,
 			email: true,
 			role: true,
+			customRoleId: true,
+			customRole: { select: { id: true, name: true } },
 			permissions: true,
 			phone: true,
 			createdAt: true,
@@ -45,6 +47,8 @@ export async function getUser(id: string) {
 			name: true,
 			email: true,
 			role: true,
+			customRoleId: true,
+			customRole: { select: { id: true, name: true, defaultPermissions: true } },
 			permissions: true,
 			phone: true,
 			createdAt: true,
@@ -56,9 +60,10 @@ export async function createUser(data: {
 	name: string;
 	email: string;
 	password: string;
-	role: "SUPER_ADMIN" | "ADMIN" | "TRAINER" | "RECEPTIONIST" | "HELPER";
+	role: "SUPER_ADMIN" | "ADMIN" | "TRAINER" | "RECEPTIONIST" | "HELPER" | "CUSTOM";
 	permissions?: Permission[];
 	phone?: string;
+	customRoleId?: string;
 }) {
 	const session = await auth();
 	if (!session) {
@@ -100,6 +105,7 @@ export async function createUser(data: {
 				email: data.email,
 				password: hashedPassword,
 				role: data.role,
+				customRoleId: data.role === "CUSTOM" ? data.customRoleId ?? null : null,
 				phone: data.phone,
 				permissions: data.permissions || [],
 			},
@@ -128,10 +134,11 @@ export async function updateUser(
 	data: {
 		name: string;
 		email: string;
-		role: "SUPER_ADMIN" | "ADMIN" | "TRAINER" | "RECEPTIONIST" | "HELPER";
+		role: "SUPER_ADMIN" | "ADMIN" | "TRAINER" | "RECEPTIONIST" | "HELPER" | "CUSTOM";
 		permissions?: Permission[];
 		phone?: string;
 		password?: string;
+		customRoleId?: string | null;
 	}
 ) {
 	const session = await auth();
@@ -174,6 +181,7 @@ export async function updateUser(
 			name: data.name,
 			email: data.email,
 			role: data.role,
+			customRoleId: data.role === "CUSTOM" ? data.customRoleId ?? null : null,
 			phone: data.phone,
 			permissions: data.permissions,
 		};

@@ -14,8 +14,22 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { updateUser, deleteUser } from "@/lib/actions/users";
+import { createRole, type RoleWithPermissions } from "@/lib/actions/roles";
 import { Permission } from "@prisma/client";
 import { getDefaultPermissionsForRole } from "@/lib/utils/permissions";
+import { Plus } from "lucide-react";
+import { toast } from "sonner";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+	DialogTrigger,
+} from "@/components/ui/dialog";
+
+type SystemRole = "SUPER_ADMIN" | "ADMIN" | "TRAINER" | "RECEPTIONIST" | "HELPER";
 
 interface StaffEditFormProps {
 	userId: string;
@@ -23,7 +37,7 @@ interface StaffEditFormProps {
 		id: string;
 		name: string;
 		email: string;
-		role: "SUPER_ADMIN" | "ADMIN" | "TRAINER" | "RECEPTIONIST" | "HELPER";
+		role: string; // system role or "custom:roleId"
 		permissions: Permission[];
 		phone?: string;
 	};
@@ -32,38 +46,91 @@ interface StaffEditFormProps {
 		| "ADMIN"
 		| "TRAINER"
 		| "RECEPTIONIST"
-		| "HELPER";
+		| "HELPER"
+		| "CUSTOM";
+	roles: RoleWithPermissions[];
 }
 
 export function StaffEditForm({
 	userId,
 	initialData,
 	currentUserRole,
+	roles: initialRoles,
 }: StaffEditFormProps) {
 	const router = useRouter();
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
+	const [rolesList, setRolesList] = useState<RoleWithPermissions[]>(initialRoles);
+	const [newRoleDialogOpen, setNewRoleDialogOpen] = useState(false);
+	const [newRole, setNewRole] = useState({
+		name: "",
+		description: "",
+		defaultPermissions: [] as Permission[],
+	});
+
+	const getPermissionsForRoleValue = (roleValue: string): Permission[] => {
+		if (roleValue.startsWith("custom:")) {
+			const roleId = roleValue.slice(7);
+			const role = rolesList.find((r) => r.id === roleId);
+			return role?.defaultPermissions ?? [];
+		}
+		return getDefaultPermissionsForRole(roleValue as SystemRole);
+	};
 
 	const [formData, setFormData] = useState(() => {
 		const permissions =
 			initialData.permissions && initialData.permissions.length > 0
 				? initialData.permissions
-				: getDefaultPermissionsForRole(initialData.role);
+				: initialData.role.startsWith("custom:")
+					? (initialRoles.find((r) => `custom:${r.id}` === initialData.role)
+							?.defaultPermissions ?? [])
+					: getDefaultPermissionsForRole(initialData.role as SystemRole);
 		return {
 			name: initialData.name,
 			email: initialData.email,
-			role: initialData.role as
-				| "SUPER_ADMIN"
-				| "ADMIN"
-				| "TRAINER"
-				| "RECEPTIONIST"
-				| "HELPER",
+			role: initialData.role,
 			permissions,
 			phone: initialData.phone || "",
 			password: "",
 			confirmPassword: "",
 		};
 	});
+
+	const handleAddRole = async () => {
+		if (!newRole.name.trim()) {
+			toast.error("Please enter a role name");
+			return;
+		}
+		try {
+			const created = await createRole({
+				name: newRole.name.trim(),
+				description: newRole.description.trim() || undefined,
+				defaultPermissions: newRole.defaultPermissions,
+			});
+			setRolesList((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+			setFormData((prev) => ({
+				...prev,
+				role: `custom:${created.id}`,
+				permissions: created.defaultPermissions,
+			}));
+			setNewRole({ name: "", description: "", defaultPermissions: [] });
+			setNewRoleDialogOpen(false);
+			toast.success("Role added successfully");
+		} catch (err) {
+			toast.error(
+				err instanceof Error ? err.message : "Failed to add role"
+			);
+		}
+	};
+
+	const handleNewRolePermissionChange = (permission: Permission, checked: boolean) => {
+		setNewRole((prev) => ({
+			...prev,
+			defaultPermissions: checked
+				? [...prev.defaultPermissions, permission]
+				: prev.defaultPermissions.filter((p) => p !== permission),
+		}));
+	};
 
 	const handlePermissionChange = (permission: Permission, checked: boolean) => {
 		setFormData((prev) => ({
@@ -94,24 +161,25 @@ export function StaffEditForm({
 			}
 		}
 
+		const isCustomRole = formData.role.startsWith("custom:");
+		const roleToSave = isCustomRole ? "CUSTOM" : (formData.role as SystemRole);
+		const customRoleId = isCustomRole ? formData.role.slice(7) : undefined;
+
 		const submitData: {
 			name: string;
 			email: string;
-			role: "SUPER_ADMIN" | "ADMIN" | "TRAINER" | "RECEPTIONIST" | "HELPER";
+			role: SystemRole | "CUSTOM";
 			permissions: Permission[];
 			phone?: string;
 			password?: string;
+			customRoleId?: string | null;
 		} = {
 			name: formData.name,
 			email: formData.email,
-			role: formData.role as
-				| "SUPER_ADMIN"
-				| "ADMIN"
-				| "TRAINER"
-				| "RECEPTIONIST"
-				| "HELPER",
+			role: roleToSave,
 			permissions: formData.permissions,
 			phone: formData.phone || undefined,
+			customRoleId: isCustomRole ? customRoleId : null,
 		};
 
 		// Only include password if provided
@@ -203,35 +271,119 @@ export function StaffEditForm({
 
 			<div className="space-y-2">
 				<Label htmlFor="role">Role *</Label>
-				<Select
-					value={formData.role}
-					onValueChange={(value) =>
-						setFormData((prev) => ({
-							...prev,
-							role: value as
-								| "SUPER_ADMIN"
-								| "ADMIN"
-								| "TRAINER"
-								| "RECEPTIONIST"
-								| "HELPER",
-						}))
-					}
-				>
-					<SelectTrigger>
-						<SelectValue />
-					</SelectTrigger>
-					<SelectContent>
-						{currentUserRole === "SUPER_ADMIN" && (
-							<SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
-						)}
-						{currentUserRole === "SUPER_ADMIN" && (
-							<SelectItem value="ADMIN">Admin</SelectItem>
-						)}
-						<SelectItem value="TRAINER">Trainer</SelectItem>
-						<SelectItem value="RECEPTIONIST">Receptionist</SelectItem>
-						<SelectItem value="HELPER">Helper</SelectItem>
-					</SelectContent>
-				</Select>
+				<div className="flex gap-2">
+					<Select
+						value={formData.role}
+						onValueChange={(value) => {
+							const defaultPermissions = getPermissionsForRoleValue(value);
+							setFormData((prev) => ({
+								...prev,
+								role: value,
+								permissions: defaultPermissions,
+							}));
+						}}
+					>
+						<SelectTrigger className="w-64">
+							<SelectValue placeholder="Select role" />
+						</SelectTrigger>
+						<SelectContent>
+							{currentUserRole === "SUPER_ADMIN" && (
+								<SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
+							)}
+							{currentUserRole === "SUPER_ADMIN" && (
+								<SelectItem value="ADMIN">Admin</SelectItem>
+							)}
+							<SelectItem value="TRAINER">Trainer</SelectItem>
+							<SelectItem value="RECEPTIONIST">Receptionist</SelectItem>
+							<SelectItem value="HELPER">Helper</SelectItem>
+							{rolesList.map((r) => (
+								<SelectItem key={r.id} value={`custom:${r.id}`}>
+									{r.name}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+					<Dialog open={newRoleDialogOpen} onOpenChange={setNewRoleDialogOpen}>
+						<DialogTrigger asChild>
+							<Button type="button" variant="outline" size="sm">
+								<Plus className="h-4 w-4 mr-1" />
+								New
+							</Button>
+						</DialogTrigger>
+						<DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+							<DialogHeader>
+								<DialogTitle>Add New Role</DialogTitle>
+								<DialogDescription>
+									Create a custom role with a name and default permissions. It will appear in the role dropdown.
+								</DialogDescription>
+							</DialogHeader>
+							<div className="space-y-4">
+								<div className="space-y-2">
+									<Label htmlFor="edit-newRoleName">Role Name *</Label>
+									<Input
+										id="edit-newRoleName"
+										value={newRole.name}
+										onChange={(e) =>
+											setNewRole((prev) => ({ ...prev, name: e.target.value }))
+										}
+										placeholder="e.g. Sales, Front Desk"
+									/>
+								</div>
+								<div className="space-y-2">
+									<Label htmlFor="edit-newRoleDescription">Description (optional)</Label>
+									<Input
+										id="edit-newRoleDescription"
+										value={newRole.description}
+										onChange={(e) =>
+											setNewRole((prev) => ({ ...prev, description: e.target.value }))
+										}
+										placeholder="Brief description of this role"
+									/>
+								</div>
+								<div className="space-y-2">
+									<Label>Default Permissions</Label>
+									<p className="text-sm text-gray-500">
+										Select the permissions that will be pre-checked when this role is assigned.
+									</p>
+									<div className="grid grid-cols-1 md:grid-cols-2 gap-2 p-3 border rounded-lg bg-gray-50 max-h-48 overflow-y-auto">
+										{Object.values(Permission).map((perm) => (
+											<div key={perm} className="flex items-center space-x-2">
+												<Checkbox
+													id={`edit-new-role-${perm}`}
+													checked={newRole.defaultPermissions.includes(perm)}
+													onCheckedChange={(checked) =>
+														handleNewRolePermissionChange(perm, checked as boolean)
+													}
+												/>
+												<Label htmlFor={`edit-new-role-${perm}`} className="text-sm font-normal">
+													{perm.replace(/_/g, " ")}
+												</Label>
+											</div>
+										))}
+									</div>
+								</div>
+							</div>
+							<DialogFooter>
+								<Button
+									type="button"
+									variant="outline"
+									onClick={() =>
+										setNewRole({ name: "", description: "", defaultPermissions: [] })
+									}
+								>
+									Cancel
+								</Button>
+								<Button
+									type="button"
+									onClick={handleAddRole}
+									disabled={!newRole.name.trim()}
+								>
+									Add Role
+								</Button>
+							</DialogFooter>
+						</DialogContent>
+					</Dialog>
+				</div>
 				<p className="text-sm text-gray-500">
 					{formData.role === "SUPER_ADMIN" &&
 						"Complete system access including user management"}
@@ -241,6 +393,11 @@ export function StaffEditForm({
 					{formData.role === "RECEPTIONIST" &&
 						"Can manage members, attendance, and payments"}
 					{formData.role === "HELPER" && "Basic access for support tasks"}
+					{formData.role.startsWith("custom:") &&
+						rolesList.find((r) => `custom:${r.id}` === formData.role)?.description}
+					{formData.role.startsWith("custom:") &&
+						!rolesList.find((r) => `custom:${r.id}` === formData.role)?.description &&
+						"Custom role — adjust permissions below."}
 				</p>
 			</div>
 

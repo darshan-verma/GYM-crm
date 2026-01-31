@@ -54,6 +54,7 @@ export function requireAnyRole(userRole: UserRole | undefined) {
 		"TRAINER",
 		"RECEPTIONIST",
 		"HELPER",
+		"CUSTOM",
 	]);
 }
 
@@ -166,6 +167,9 @@ export function getDefaultPermissionsForRole(role: UserRole): Permission[] {
 				Permission.VIEW_ATTENDANCE,
 				Permission.MARK_ATTENDANCE,
 			];
+		case "CUSTOM":
+			// Custom roles use permissions from the Role record or user's permissions
+			return [];
 		default:
 			return [];
 	}

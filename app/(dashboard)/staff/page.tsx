@@ -20,6 +20,7 @@ interface StaffUser {
 	name: string;
 	email: string;
 	role: string;
+	customRole?: { id: string; name: string } | null;
 	phone?: string | null;
 	createdAt: Date;
 }
@@ -33,7 +34,17 @@ export default async function StaffPage() {
 
 	const users = await getUsers();
 
-	const getRoleBadge = (role: string) => {
+	const getRoleBadge = (user: StaffUser) => {
+		const role = user.role;
+		const customName = user.customRole?.name;
+		if (role === "CUSTOM" && customName) {
+			return (
+				<Badge variant="secondary" className="bg-slate-100 text-slate-800">
+					<User className="h-3 w-3 mr-1" />
+					{customName}
+				</Badge>
+			);
+		}
 		switch (role) {
 			case "SUPER_ADMIN":
 				return (
@@ -71,7 +82,7 @@ export default async function StaffPage() {
 					</Badge>
 				);
 			default:
-				return <Badge>{role}</Badge>;
+				return <Badge>{customName || role}</Badge>;
 		}
 	};
 
@@ -151,7 +162,7 @@ export default async function StaffPage() {
 										</div>
 									</td>
 									<td className="px-6 py-4 whitespace-nowrap">
-										{getRoleBadge(user.role)}
+										{getRoleBadge(user)}
 									</td>
 									<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
 										{new Date(user.createdAt).toLocaleDateString()}
