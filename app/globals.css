@@ -157,6 +157,32 @@
   }
 }
 
+/* Tiptap / ProseMirror editor (promotions) */
+.ProseMirror {
+	min-height: 120px;
+	outline: none;
+}
+.ProseMirror p {
+	margin: 0 0 0.5em;
+}
+.ProseMirror p:last-child {
+	margin-bottom: 0;
+}
+.ProseMirror ul,
+.ProseMirror ol {
+	padding-left: 1.5em;
+	margin: 0 0 0.5em;
+}
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3 {
+	margin: 0.75em 0 0.25em;
+	font-weight: 600;
+}
+.ProseMirror h1 { font-size: 1.25rem; }
+.ProseMirror h2 { font-size: 1.125rem; }
+.ProseMirror h3 { font-size: 1rem; }
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;

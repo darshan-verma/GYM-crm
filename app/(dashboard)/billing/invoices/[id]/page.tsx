@@ -77,6 +77,7 @@ export default async function InvoiceDetailPage({
 	const gymAddress = gymProfile?.address ?? "123 Fitness Street, Gym City, GC 12345";
 	const gymPhone = gymProfile?.phone ?? "+1 (555) 123-4567";
 	const gymEmail = gymProfile?.email ?? "contact@probodyline.com";
+	const watermarkUrl = gymProfile && "watermarkUrl" in gymProfile ? (gymProfile as { watermarkUrl?: string | null }).watermarkUrl : null;
 
 	return (
 		<div className="space-y-6">
@@ -101,13 +102,36 @@ export default async function InvoiceDetailPage({
 			</div>
 
 			{/* Invoice Document */}
-			<div className="bg-white rounded-lg shadow-lg p-8 print:shadow-none">
+			<div className="bg-white rounded-lg shadow-lg p-8 print:shadow-none relative">
+				{/* Watermark - invoices only; visible for both transparent PNG and JPG */}
+				{watermarkUrl && (
+					<div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden rounded-lg z-0 min-h-[320px]">
+						<img
+							src={watermarkUrl}
+							alt=""
+							className="max-w-[75%] max-h-[75%] min-w-[180px] min-h-[180px] w-auto h-auto object-contain opacity-25"
+							loading="eager"
+							draggable={false}
+						/>
+					</div>
+				)}
+				<div className="relative z-10">
 				{/* Header */}
 				<div className="flex justify-between items-start mb-8 pb-8 border-b">
-					<div>
-						<h2 className="text-3xl font-bold text-gray-900 mb-2">
-							{gymName}
-						</h2>
+					<div className="flex items-start gap-4">
+						{gymProfile?.logoUrl && (
+							<div className="w-14 h-14 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+								<img
+									src={gymProfile.logoUrl}
+									alt=""
+									className="w-full h-full object-contain"
+								/>
+							</div>
+						)}
+						<div>
+							<h2 className="text-3xl font-bold text-gray-900 mb-2">
+								{gymName}
+							</h2>
 						<div className="text-sm text-gray-600 space-y-1">
 							{gymDescription && <p>{gymDescription}</p>}
 							{gymAddress && (
@@ -128,6 +152,7 @@ export default async function InvoiceDetailPage({
 									{gymEmail}
 								</div>
 							)}
+						</div>
 						</div>
 					</div>
 					<div className="text-right">
@@ -398,6 +423,7 @@ export default async function InvoiceDetailPage({
 						For questions about this invoice, please contact us at{" "}
 						{gymEmail}
 					</p>
+				</div>
 				</div>
 			</div>
 

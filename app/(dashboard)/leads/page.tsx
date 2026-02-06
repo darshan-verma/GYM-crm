@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Plus, Users, TrendingUp, Phone, Download } from "lucide-react";
 import Link from "next/link";
 import LeadsPipeline from "@/components/leads/LeadsPipeline";
+import ImportLeadsDialog from "@/components/leads/ImportLeadsDialog";
 
 export default async function LeadsPage() {
 	const [leadsByStatus, stats] = await Promise.all([
@@ -39,6 +40,7 @@ export default async function LeadsPage() {
 							Export
 						</Link>
 					</Button>
+					<ImportLeadsDialog />
 					<Button
 						asChild
 						className="bg-gradient-to-r from-orange-600 to-orange-700"

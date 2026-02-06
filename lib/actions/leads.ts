@@ -190,3 +190,240 @@ export async function deleteLead(id: string) {
 		return { success: false, error: "Failed to delete lead" };
 	}
 }
+
+const VALID_SOURCES: LeadSource[] = [
+	"WALK_IN",
+	"PHONE_CALL",
+	"WEBSITE",
+	"SOCIAL_MEDIA",
+	"REFERRAL",
+	"OTHER",
+];
+const VALID_STATUSES: LeadStatus[] = [
+	"NEW",
+	"CONTACTED",
+	"FOLLOW_UP",
+	"CONVERTED",
+	"LOST",
+];
+
+function parseExcelValue<T>(val: unknown, fallback: T): T {
+	if (val === undefined || val === null || val === "") return fallback;
+	return val as T;
+}
+
+function parseNumber(val: unknown): number | null {
+	if (val === undefined || val === null || val === "") return null;
+	if (typeof val === "number" && !Number.isNaN(val)) return val;
+	const s = String(val).replace(/[₹,\s]/g, "").trim();
+	const n = parseFloat(s);
+	return Number.isNaN(n) ? null : n;
+}
+
+function parseDate(val: unknown): Date | null {
+	if (val === undefined || val === null || val === "") return null;
+	if (val instanceof Date && !Number.isNaN(val.getTime())) return val;
+	const s = String(val).trim();
+	if (s === "N/A" || !s) return null;
+	const d = new Date(s);
+	return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export type ImportLeadsResult = {
+	success: boolean;
+	imported: number;
+	skipped: number;
+	errors: string[];
+};
+
+export async function importLeadsFromFile(
+	formData: FormData
+): Promise<ImportLeadsResult> {
+	const session = await auth();
+	if (!session) {
+		return { success: false, imported: 0, skipped: 0, errors: ["Unauthorized"] };
+	}
+
+	const file = formData.get("file") as File | null;
+	if (!file || file.size === 0) {
+		return {
+			success: false,
+			imported: 0,
+			skipped: 0,
+			errors: ["Please select an Excel file (.xlsx or .xls)"],
+		};
+	}
+
+	const validTypes = [
+		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		"application/vnd.ms-excel",
+	];
+	if (!validTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls)$/i)) {
+		return {
+			success: false,
+			imported: 0,
+			skipped: 0,
+			errors: ["Invalid file type. Please upload an Excel file (.xlsx or .xls)"],
+		};
+	}
+
+	const XLSX = await import("xlsx");
+	const buffer = Buffer.from(await file.arrayBuffer());
+	const workbook = XLSX.read(buffer, { type: "buffer" });
+	const sheetName = workbook.SheetNames[0] || "Leads";
+	const worksheet = workbook.Sheets[sheetName];
+	const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet);
+
+	if (!rows.length) {
+		return {
+			success: false,
+			imported: 0,
+			skipped: 0,
+			errors: ["The file has no data rows. Ensure the first sheet contains leads."],
+		};
+	}
+
+	let imported = 0;
+	let skipped = 0;
+	const errors: string[] = [];
+
+	for (let i = 0; i < rows.length; i++) {
+		const row = rows[i];
+		const rowNum = i + 2; // 1-based + header row
+
+		const name = parseExcelValue(
+			row["Name"] ?? row["name"],
+			""
+		) as string;
+		const phone = parseExcelValue(
+			row["Phone"] ?? row["phone"],
+			""
+		) as string;
+
+		if (!name?.trim() || !phone?.trim()) {
+			skipped++;
+			errors.push(`Row ${rowNum}: Name and Phone are required. Skipped.`);
+			continue;
+		}
+
+		const rawSource = String(row["Source"] ?? row["source"] ?? "WALK_IN").toUpperCase().replace(/\s/g, "_");
+		const source: LeadSource = VALID_SOURCES.includes(rawSource as LeadSource)
+			? (rawSource as LeadSource)
+			: "WALK_IN";
+
+		const rawStatus = String(row["Status"] ?? row["status"] ?? "NEW").toUpperCase().replace(/\s/g, "_");
+		const status: LeadStatus = VALID_STATUSES.includes(rawStatus as LeadStatus)
+			? (rawStatus as LeadStatus)
+			: "NEW";
+
+		const emailVal = row["Email"] ?? row["email"];
+		const email =
+			emailVal !== undefined && emailVal !== null && String(emailVal).trim() !== "" && String(emailVal) !== "N/A"
+				? String(emailVal).trim()
+				: null;
+
+		const ageVal = row["Age"] ?? row["age"];
+		let age: number | null = null;
+		if (ageVal !== undefined && ageVal !== null && String(ageVal) !== "N/A") {
+			const n = typeof ageVal === "number" ? ageVal : parseInt(String(ageVal), 10);
+			if (!Number.isNaN(n)) age = n;
+		}
+
+		const genderVal = row["Gender"] ?? row["gender"];
+		const gender =
+			genderVal !== undefined && genderVal !== null && String(genderVal).trim() !== "" && String(genderVal) !== "N/A"
+				? String(genderVal).trim()
+				: null;
+
+		const interestedPlanVal = row["Interested Plan"] ?? row["interestedPlan"];
+		const interestedPlan =
+			interestedPlanVal !== undefined &&
+			interestedPlanVal !== null &&
+			String(interestedPlanVal).trim() !== "" &&
+			String(interestedPlanVal) !== "N/A"
+				? String(interestedPlanVal).trim()
+				: null;
+
+		const budget = parseNumber(row["Budget"] ?? row["budget"]);
+
+		const preferredTimeVal = row["Preferred Time"] ?? row["preferredTime"];
+		const preferredTime =
+			preferredTimeVal !== undefined &&
+			preferredTimeVal !== null &&
+			String(preferredTimeVal).trim() !== "" &&
+			String(preferredTimeVal) !== "N/A"
+				? String(preferredTimeVal).trim()
+				: null;
+
+		const notesVal = row["Notes"] ?? row["notes"];
+		const notes =
+			notesVal !== undefined && notesVal !== null && String(notesVal).trim() !== "" && String(notesVal) !== "N/A"
+				? String(notesVal).trim()
+				: null;
+
+		const priorityVal = row["Priority"] ?? row["priority"];
+		const priority =
+			priorityVal !== undefined &&
+			priorityVal !== null &&
+			String(priorityVal).trim() !== "" &&
+			String(priorityVal) !== "N/A"
+				? String(priorityVal).trim()
+				: null;
+
+		const followUpDate = parseDate(row["Follow-up Date"] ?? row["followUpDate"]);
+		const lastContactDate = parseDate(row["Last Contact Date"] ?? row["lastContactDate"]);
+		const convertedDate = parseDate(row["Converted Date"] ?? row["convertedDate"]);
+
+		try {
+			await prisma.lead.create({
+				data: {
+					name: name.trim(),
+					phone: phone.trim(),
+					email,
+					age,
+					gender,
+					source,
+					status,
+					interestedPlan,
+					budget: budget !== null ? budget : undefined,
+					preferredTime,
+					notes,
+					priority,
+					followUpDate: followUpDate ?? undefined,
+					lastContactDate: lastContactDate ?? new Date(),
+					convertedDate: convertedDate ?? undefined,
+					assignedTo: session.user.id,
+				},
+			});
+			imported++;
+		} catch (err) {
+			errors.push(
+				`Row ${rowNum}: Failed to create lead "${name}" - ${err instanceof Error ? err.message : "Unknown error"}`
+			);
+		}
+	}
+
+	if (imported > 0) {
+		await createActivityLog({
+			userId: session.user.id,
+			action: "BULK_IMPORT",
+			entity: "Lead",
+			entityId: null,
+			details: {
+				imported,
+				skipped,
+				fileName: file.name,
+				totalRows: rows.length,
+			},
+		});
+	}
+
+	revalidatePath("/leads");
+
+	return {
+		success: imported > 0,
+		imported,
+		skipped,
+		errors,
+	};
+}

@@ -17,11 +17,12 @@ export default async function DashboardLayout({
 
   const activeGym = await getActiveGymProfile()
   const gymTitle = activeGym?.name ?? "Pro Bodyline"
+  const gymLogoUrl = activeGym?.logoUrl ?? null
 
   return (
     <div className="min-h-screen bg-gray-50/50">
       {/* Sidebar */}
-      <Sidebar user={session.user} gymTitle={gymTitle} />
+      <Sidebar user={session.user} gymTitle={gymTitle} gymLogoUrl={gymLogoUrl} />
 
       {/* Main Content */}
       <div className="lg:pl-64">

@@ -7,6 +7,11 @@ export interface GymProfileForPDF {
 	address?: string | null;
 	phone?: string | null;
 	email?: string | null;
+	logoUrl?: string | null;
+	/** Base64 data URL for embedding in PDF (e.g. data:image/png;base64,...). Set by server when generating PDF. */
+	logoBase64?: string | null;
+	/** Base64 data URL for watermark on invoice PDF only. */
+	watermarkBase64?: string | null;
 }
 
 interface InvoiceData {
@@ -45,24 +50,72 @@ function getInvoiceHeaderLines(data: InvoiceData) {
 	return { name, tagline, contact };
 }
 
+/** Get jsPDF image format from a data URL (e.g. data:image/png;base64,...). */
+function getImageFormatFromDataUrl(dataUrl: string): string {
+	if (dataUrl.startsWith("data:")) {
+		const m = dataUrl.match(/data:image\/(\w+);/);
+		if (m) {
+			const fmt = m[1].toUpperCase();
+			if (fmt === "JPEG" || fmt === "JPG") return "JPEG";
+			if (fmt === "PNG") return "PNG";
+			if (fmt === "WEBP") return "WEBP";
+			if (fmt === "GIF") return "GIF";
+		}
+	}
+	return "PNG";
+}
+
 export function generateInvoicePDF(data: InvoiceData) {
 	const doc = new jsPDF();
+
+	// Watermark (behind all content) - invoice only; PNGs are pre-flattened to JPEG by getWatermarkAsDataUrlForPdf
+	const hasWatermark = Boolean(data.gymProfile?.watermarkBase64);
+	if (hasWatermark && data.gymProfile?.watermarkBase64) {
+		try {
+			const pageW = 210;
+			const pageH = 297;
+			const w = 140;
+			const h = 140;
+			const x = (pageW - w) / 2;
+			const y = (pageH - h) / 2;
+			const format = getImageFormatFromDataUrl(data.gymProfile.watermarkBase64);
+			const docAny = doc as unknown as { setGState?: (g: { opacity: number }) => void };
+			if (typeof docAny.setGState === "function") {
+				docAny.setGState({ opacity: 0.2 });
+			}
+			doc.addImage(data.gymProfile.watermarkBase64, format, x, y, w, h);
+			if (typeof docAny.setGState === "function") {
+				docAny.setGState({ opacity: 1 });
+			}
+		} catch {
+			// Skip watermark on error
+		}
+	}
 
 	// Set font
 	doc.setFont("helvetica");
 
 	const header = getInvoiceHeaderLines(data);
+	const hasLogo = Boolean(data.gymProfile?.logoBase64);
 
-	// Header - Company Logo and Name
+	// Header - Company Logo (if provided) and Name
+	const textStartX = hasLogo ? 52 : 20;
+	if (hasLogo && data.gymProfile?.logoBase64) {
+		try {
+			doc.addImage(data.gymProfile.logoBase64, 20, 15, 26, 26);
+		} catch {
+			// If image fails, fall back to text only
+		}
+	}
 	doc.setFontSize(24);
 	doc.setTextColor(37, 99, 235); // Blue color
-	doc.text(header.name, 20, 20);
+	doc.text(header.name, textStartX, 20);
 
 	doc.setFontSize(10);
 	doc.setTextColor(100, 100, 100);
-	doc.text(header.tagline, 20, 27);
-	doc.text(header.contact[0], 20, 32);
-	if (header.contact[1]) doc.text(header.contact[1], 20, 37);
+	doc.text(header.tagline, textStartX, 27);
+	doc.text(header.contact[0], textStartX, 32);
+	if (header.contact[1]) doc.text(header.contact[1], textStartX, 37);
 
 	// Draw line
 	doc.setDrawColor(200, 200, 200);
@@ -264,19 +317,53 @@ export function generateInvoicePDF(data: InvoiceData) {
 // Export invoice as blob for server-side usage
 export function generateInvoicePDFBlob(data: InvoiceData): Blob {
 	const doc = new jsPDF();
+
+	// Watermark (behind all content) - invoice only; PNGs are pre-flattened to JPEG by getWatermarkAsDataUrlForPdf
+	const hasWatermark = Boolean(data.gymProfile?.watermarkBase64);
+	if (hasWatermark && data.gymProfile?.watermarkBase64) {
+		try {
+			const pageW = 210;
+			const pageH = 297;
+			const w = 140;
+			const h = 140;
+			const x = (pageW - w) / 2;
+			const y = (pageH - h) / 2;
+			const format = getImageFormatFromDataUrl(data.gymProfile.watermarkBase64);
+			const docAny = doc as unknown as { setGState?: (g: { opacity: number }) => void };
+			if (typeof docAny.setGState === "function") {
+				docAny.setGState({ opacity: 0.2 });
+			}
+			doc.addImage(data.gymProfile.watermarkBase64, format, x, y, w, h);
+			if (typeof docAny.setGState === "function") {
+				docAny.setGState({ opacity: 1 });
+			}
+		} catch {
+			// Skip watermark on error
+		}
+	}
+
 	const header = getInvoiceHeaderLines(data);
+	const hasLogo = Boolean(data.gymProfile?.logoBase64);
 
 	doc.setFont("helvetica");
 
+	const textStartX = hasLogo ? 52 : 20;
+	if (hasLogo && data.gymProfile?.logoBase64) {
+		try {
+			doc.addImage(data.gymProfile.logoBase64, 20, 15, 26, 26);
+		} catch {
+			// If image fails, fall back to text only
+		}
+	}
 	doc.setFontSize(24);
 	doc.setTextColor(37, 99, 235);
-	doc.text(header.name, 20, 20);
+	doc.text(header.name, textStartX, 20);
 
 	doc.setFontSize(10);
 	doc.setTextColor(100, 100, 100);
-	doc.text(header.tagline, 20, 27);
-	doc.text(header.contact[0], 20, 32);
-	if (header.contact[1]) doc.text(header.contact[1], 20, 37);
+	doc.text(header.tagline, textStartX, 27);
+	doc.text(header.contact[0], textStartX, 32);
+	if (header.contact[1]) doc.text(header.contact[1], textStartX, 37);
 
 	doc.setDrawColor(200, 200, 200);
 	doc.line(20, 42, 190, 42);

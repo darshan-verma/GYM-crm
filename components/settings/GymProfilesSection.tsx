@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
 	Card,
 	CardContent,
@@ -21,7 +21,7 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { Building2, Plus, Pencil, Trash2, Check } from "lucide-react";
+import { Building2, Plus, Pencil, Trash2, Check, Upload, X, Droplets } from "lucide-react";
 import type { GymProfile } from "@prisma/client";
 import {
 	createGymProfile,
@@ -31,6 +31,7 @@ import {
 	type GymProfileFormData,
 } from "@/lib/actions/gym-profiles";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 type GymProfileWithActive = GymProfile & { isActive?: boolean };
 
@@ -50,7 +51,13 @@ export default function GymProfilesSection({
 		address: "",
 		phone: "",
 		email: "",
+		logoUrl: null,
+		watermarkUrl: null,
 	});
+	const [logoUploading, setLogoUploading] = useState(false);
+	const [watermarkUploading, setWatermarkUploading] = useState(false);
+	const fileInputRef = useRef<HTMLInputElement>(null);
+	const watermarkInputRef = useRef<HTMLInputElement>(null);
 
 	const resetForm = () => {
 		setForm({
@@ -59,6 +66,8 @@ export default function GymProfilesSection({
 			address: "",
 			phone: "",
 			email: "",
+			logoUrl: null,
+			watermarkUrl: null,
 		});
 		setEditingId(null);
 		setOpen(false);
@@ -69,17 +78,83 @@ export default function GymProfilesSection({
 		setOpen(true);
 	};
 
-	const openEdit = (p: GymProfile) => {
+	const openEdit = (p: GymProfileWithActive) => {
+		const logoUrl = "logoUrl" in p ? (p as { logoUrl?: string | null }).logoUrl : null;
+		const watermarkUrl = "watermarkUrl" in p ? (p as { watermarkUrl?: string | null }).watermarkUrl : null;
 		setForm({
 			name: p.name,
 			description: p.description ?? "",
 			address: p.address ?? "",
 			phone: p.phone ?? "",
 			email: p.email ?? "",
+			logoUrl: logoUrl ?? null,
+			watermarkUrl: watermarkUrl ?? null,
 		});
 		setEditingId(p.id);
 		setOpen(true);
 	};
+
+	const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		if (!file) return;
+		if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type)) {
+			toast.error("Invalid file. Use JPEG, PNG, WebP or GIF.");
+			return;
+		}
+		if (file.size > 2 * 1024 * 1024) {
+			toast.error("Logo should be under 2MB.");
+			return;
+		}
+		setLogoUploading(true);
+		try {
+			const fd = new FormData();
+			fd.set("file", file);
+			fd.set("folder", "gym");
+			const res = await fetch("/api/upload", { method: "POST", body: fd });
+			const data = await res.json();
+			if (!res.ok) throw new Error(data.error || "Upload failed");
+			setForm((f) => ({ ...f, logoUrl: data.url }));
+			toast.success("Logo uploaded");
+		} catch (err) {
+			toast.error((err as Error).message || "Upload failed");
+		} finally {
+			setLogoUploading(false);
+			fileInputRef.current?.form?.reset();
+		}
+	};
+
+	const removeLogo = () => setForm((f) => ({ ...f, logoUrl: null }));
+
+	const handleWatermarkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		if (!file) return;
+		if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type)) {
+			toast.error("Invalid file. Use JPEG, PNG, WebP or GIF.");
+			return;
+		}
+		if (file.size > 2 * 1024 * 1024) {
+			toast.error("Watermark should be under 2MB.");
+			return;
+		}
+		setWatermarkUploading(true);
+		try {
+			const fd = new FormData();
+			fd.set("file", file);
+			fd.set("folder", "watermark");
+			const res = await fetch("/api/upload", { method: "POST", body: fd });
+			const data = await res.json();
+			if (!res.ok) throw new Error(data.error || "Upload failed");
+			setForm((f) => ({ ...f, watermarkUrl: data.url }));
+			toast.success("Watermark uploaded");
+		} catch (err) {
+			toast.error((err as Error).message || "Upload failed");
+		} finally {
+			setWatermarkUploading(false);
+			watermarkInputRef.current?.form?.reset();
+		}
+	};
+
+	const removeWatermark = () => setForm((f) => ({ ...f, watermarkUrl: null }));
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -140,6 +215,101 @@ export default function GymProfilesSection({
 								</DialogDescription>
 							</DialogHeader>
 							<form onSubmit={handleSubmit} className="space-y-4">
+								{/* Gym Logo */}
+								<div className="space-y-2">
+									<Label>Gym Logo</Label>
+									<div className="flex items-center gap-4">
+										{form.logoUrl ? (
+											<div className="relative">
+												<div className="w-20 h-20 rounded-lg border bg-muted overflow-hidden flex items-center justify-center">
+													<img
+														src={form.logoUrl}
+														alt="Gym logo"
+														className="w-full h-full object-contain"
+													/>
+												</div>
+												<Button
+													type="button"
+													variant="destructive"
+													size="icon"
+													className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+													onClick={removeLogo}
+												>
+													<X className="h-3 w-3" />
+												</Button>
+											</div>
+										) : (
+											<label className="flex flex-col items-center justify-center w-20 h-20 rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-muted-foreground/50 cursor-pointer transition-colors">
+												<input
+													ref={fileInputRef}
+													type="file"
+													accept="image/jpeg,image/png,image/webp,image/gif"
+													className="hidden"
+													onChange={handleLogoUpload}
+													disabled={logoUploading}
+												/>
+												{logoUploading ? (
+													<span className="text-xs text-muted-foreground">Uploading...</span>
+												) : (
+													<Upload className="h-6 w-6 text-muted-foreground" />
+												)}
+												<span className="text-xs text-muted-foreground mt-1">Logo</span>
+											</label>
+										)}
+										<p className="text-xs text-muted-foreground">
+											Used in CRM, invoices and PDFs. Max 2MB, PNG/JPEG/WebP.
+										</p>
+									</div>
+								</div>
+								{/* Watermark (invoices & PDF only) */}
+								<div className="space-y-2">
+									<Label className="flex items-center gap-2">
+										<Droplets className="h-4 w-4" />
+										Watermark
+									</Label>
+									<div className="flex items-center gap-4">
+										{form.watermarkUrl ? (
+											<div className="relative">
+												<div className="w-20 h-20 rounded-lg border bg-muted overflow-hidden flex items-center justify-center">
+													<img
+														src={form.watermarkUrl}
+														alt="Watermark"
+														className="w-full h-full object-contain opacity-80"
+													/>
+												</div>
+												<Button
+													type="button"
+													variant="destructive"
+													size="icon"
+													className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+													onClick={removeWatermark}
+												>
+													<X className="h-3 w-3" />
+												</Button>
+											</div>
+										) : (
+											<label className="flex flex-col items-center justify-center w-20 h-20 rounded-lg border-2 border-dashed border-muted-foreground/25 hover:border-muted-foreground/50 cursor-pointer transition-colors">
+												<input
+													ref={watermarkInputRef}
+													type="file"
+													accept="image/jpeg,image/png,image/webp,image/gif"
+													className="hidden"
+													onChange={handleWatermarkUpload}
+													disabled={watermarkUploading}
+												/>
+												{watermarkUploading ? (
+													<span className="text-xs text-muted-foreground">Uploading...</span>
+												) : (
+													<Droplets className="h-6 w-6 text-muted-foreground" />
+												)}
+												<span className="text-xs text-muted-foreground mt-1">Watermark</span>
+											</label>
+										)}
+										<p className="text-xs text-muted-foreground">
+											Shown on invoice page and PDF only. Max 2MB. Use a light or transparent image.
+										</p>
+									</div>
+								</div>
 								<div className="space-y-2">
 									<Label htmlFor="name">Gym Name *</Label>
 									<Input
@@ -238,12 +408,20 @@ export default function GymProfilesSection({
 								Active profile (used everywhere): select one below.
 							</p>
 						)}
-						{profiles.map((profile) => (
+						{profiles.map((profile) => {
+							const profileLogoUrl = "logoUrl" in profile ? (profile as { logoUrl?: string | null }).logoUrl : undefined;
+							return (
 							<div
 								key={profile.id}
 								className="flex items-center justify-between p-4 border rounded-lg bg-card"
 							>
-								<div className="flex-1 min-w-0">
+								<div className="flex items-center gap-3 flex-1 min-w-0">
+									{profileLogoUrl ? (
+										<div className="w-10 h-10 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+											<img src={profileLogoUrl} alt="" className="w-full h-full object-contain" />
+										</div>
+									) : null}
+									<div className="min-w-0 flex-1">
 									<div className="flex items-center gap-2">
 										<p className="font-semibold">{profile.name}</p>
 										{activeId === profile.id && (
@@ -264,6 +442,7 @@ export default function GymProfilesSection({
 										)}
 										{profile.phone && <span>{profile.phone}</span>}
 										{profile.email && <span>{profile.email}</span>}
+									</div>
 									</div>
 								</div>
 								<div className="flex items-center gap-2 ml-4">
@@ -301,7 +480,8 @@ export default function GymProfilesSection({
 									</Button>
 								</div>
 							</div>
-						))}
+							);
+						})}
 					</div>
 				)}
 			</CardContent>

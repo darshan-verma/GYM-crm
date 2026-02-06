@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/db/prisma";
 import { revalidatePath } from "next/cache";
+import type { GymProfile } from "@prisma/client";
 
 const ACTIVE_GYM_PROFILE_KEY = "activeGymProfileId";
 
@@ -11,16 +12,18 @@ export type GymProfileFormData = {
 	address?: string;
 	phone?: string;
 	email?: string;
+	logoUrl?: string | null;
+	watermarkUrl?: string | null;
 };
 
-export async function getGymProfiles() {
+export async function getGymProfiles(): Promise<GymProfile[]> {
 	const profiles = await prisma.gymProfile.findMany({
 		orderBy: { name: "asc" },
 	});
 	return profiles;
 }
 
-export async function getActiveGymProfile() {
+export async function getActiveGymProfile(): Promise<GymProfile | null> {
 	const setting = await prisma.systemSettings.findUnique({
 		where: { key: ACTIVE_GYM_PROFILE_KEY },
 	});
@@ -49,6 +52,8 @@ export async function createGymProfile(data: GymProfileFormData) {
 			address: data.address?.trim() || null,
 			phone: data.phone?.trim() || null,
 			email: data.email?.trim() || null,
+			logoUrl: data.logoUrl?.trim() || null,
+			watermarkUrl: data.watermarkUrl?.trim() || null,
 		},
 	});
 	revalidatePath("/settings");
@@ -64,9 +69,13 @@ export async function updateGymProfile(id: string, data: GymProfileFormData) {
 			address: data.address?.trim() || null,
 			phone: data.phone?.trim() || null,
 			email: data.email?.trim() || null,
+			logoUrl: data.logoUrl !== undefined ? (data.logoUrl?.trim() || null) : undefined,
+			watermarkUrl: data.watermarkUrl !== undefined ? (data.watermarkUrl?.trim() || null) : undefined,
 		},
 	});
 	revalidatePath("/settings");
+	revalidatePath("/");
+	revalidatePath("/billing/invoices");
 	return { success: true };
 }
 

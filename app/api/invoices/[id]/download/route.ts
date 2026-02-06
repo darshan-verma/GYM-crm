@@ -3,6 +3,21 @@ import { auth } from "@/lib/auth";
 import prisma from "@/lib/db/prisma";
 import { generateInvoicePDFBlob } from "@/lib/utils/pdf";
 import { getActiveGymProfile } from "@/lib/actions/gym-profiles";
+import { getLogoAsDataUrl, getWatermarkAsDataUrlForPdf } from "@/lib/utils/logo";
+
+/** Resolve relative URLs to absolute using request origin so fetch() works in API routes (e.g. serverless). */
+function resolveAssetUrl(url: string | undefined, request: Request): string | undefined {
+	if (!url) return undefined;
+	if (url.startsWith("http://") || url.startsWith("https://")) return url;
+	if (url.startsWith("/")) {
+		try {
+			return new URL(url, request.url).toString();
+		} catch {
+			return url;
+		}
+	}
+	return url;
+}
 
 export async function GET(
 	request: Request,
@@ -39,6 +54,13 @@ export async function GET(
 		});
 
 		const gymProfile = await getActiveGymProfile();
+		const rawLogoUrl = gymProfile && "logoUrl" in gymProfile ? (gymProfile as { logoUrl?: string | null }).logoUrl : undefined;
+		const rawWatermarkUrl = gymProfile && "watermarkUrl" in gymProfile ? (gymProfile as { watermarkUrl?: string | null }).watermarkUrl : undefined;
+		// Resolve to absolute URLs so fetch works when file is not on disk (e.g. serverless or Blob)
+		const logoUrl = resolveAssetUrl(rawLogoUrl ?? undefined, request);
+		const watermarkUrl = resolveAssetUrl(rawWatermarkUrl ?? undefined, request);
+		const logoBase64 = logoUrl ? await getLogoAsDataUrl(logoUrl) : null;
+		const watermarkBase64 = watermarkUrl ? await getWatermarkAsDataUrlForPdf(watermarkUrl) : null;
 
 		// Generate PDF
 		const pdfBlob = generateInvoicePDFBlob({
@@ -49,6 +71,8 @@ export async function GET(
 						address: gymProfile.address,
 						phone: gymProfile.phone,
 						email: gymProfile.email,
+						logoBase64: logoBase64 ?? undefined,
+						watermarkBase64: watermarkBase64 ?? undefined,
 					}
 				: undefined,
 			invoiceNumber: payment.invoiceNumber,

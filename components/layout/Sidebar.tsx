@@ -19,6 +19,7 @@ import {
 	X,
 	LogOut,
 	Shield,
+	Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -38,6 +39,12 @@ const navigation = [
 		name: "Leads",
 		href: "/leads",
 		icon: Megaphone,
+		permission: Permission.VIEW_LEADS,
+	},
+	{
+		name: "Promotions",
+		href: "/promotions",
+		icon: Sparkles,
 		permission: Permission.VIEW_LEADS,
 	},
 	{
@@ -106,6 +113,7 @@ const navigation = [
 export default function Sidebar({
 	user,
 	gymTitle = "Pro Bodyline",
+	gymLogoUrl = null,
 }: {
 	user: {
 		id: string;
@@ -116,6 +124,7 @@ export default function Sidebar({
 		permissions?: Permission[];
 	};
 	gymTitle?: string;
+	gymLogoUrl?: string | null;
 }) {
 	const pathname = usePathname();
 	const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -125,9 +134,15 @@ export default function Sidebar({
 			{/* Mobile menu button */}
 			<div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b px-4 py-3 flex items-center justify-between">
 				<div className="flex items-center gap-2">
-					<div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center">
-						<Dumbbell className="w-5 h-5 text-white" />
-					</div>
+					{gymLogoUrl ? (
+						<div className="w-8 h-8 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+							<img src={gymLogoUrl} alt="" className="w-full h-full object-contain" />
+						</div>
+					) : (
+						<div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center">
+							<Dumbbell className="w-5 h-5 text-white" />
+						</div>
+					)}
 					<span className="font-bold text-lg">{gymTitle}</span>
 				</div>
 				<Button
@@ -149,11 +164,17 @@ export default function Sidebar({
 				<div className="flex flex-col h-full">
 					{/* Logo */}
 					<div className="h-16 flex items-center gap-3 px-6 border-b">
-						<div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center">
-							<Dumbbell className="w-6 h-6 text-white" />
-						</div>
-						<div>
-							<h1 className="font-bold text-lg leading-tight">{gymTitle}</h1>
+						{gymLogoUrl ? (
+							<div className="w-10 h-10 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+								<img src={gymLogoUrl} alt="" className="w-full h-full object-contain" />
+							</div>
+						) : (
+							<div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center">
+								<Dumbbell className="w-6 h-6 text-white" />
+							</div>
+						)}
+						<div className="min-w-0">
+							<h1 className="font-bold text-lg leading-tight truncate">{gymTitle}</h1>
 							<p className="text-xs text-muted-foreground">Fitness CRM</p>
 						</div>
 					</div>
