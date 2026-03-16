@@ -10,12 +10,14 @@ declare module "next-auth" {
 			id: string;
 			role: UserRole;
 			permissions: Permission[];
+			gymProfileId?: string | null;
 		} & DefaultSession["user"];
 	}
 
 	interface User {
 		role: UserRole;
 		permissions: Permission[];
+		gymProfileId?: string | null;
 	}
 }
 
@@ -25,27 +27,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 		CredentialsProvider({
 			name: "Credentials",
 			credentials: {
-				email: { label: "Email", type: "email" },
+				identifier: { label: "Email or Username", type: "text" },
 				password: { label: "Password", type: "password" },
 			},
 			async authorize(credentials) {
-				if (!credentials?.email || !credentials?.password) {
+				if (!credentials?.identifier || !credentials?.password) {
 					return null;
 				}
 
-				const user = await prisma.user.findUnique({
-					where: { email: credentials.email as string },
-					select: {
-						id: true,
-						email: true,
-						name: true,
-						password: true,
-						role: true,
-						permissions: true,
-						active: true,
-						avatar: true,
-					},
-				});
+				const identifier = credentials.identifier as string;
+
+				const user =
+					(await prisma.user.findUnique({
+						where: { email: identifier.toLowerCase() },
+					})) ??
+					(await prisma.user.findUnique({
+						where: { username: identifier },
+					}));
 
 				if (!user || !user.active) {
 					return null;
@@ -71,8 +69,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 					email: user.email,
 					name: user.name,
 					role: user.role,
-					permissions: user.permissions,
+					permissions: user.permissions ?? [],
 					image: user.avatar,
+					gymProfileId: user.gymProfileId ?? null,
 				};
 			},
 		}),
@@ -80,12 +79,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 	callbacks: {
 		async jwt({ token, user }) {
 			if (user) {
-				token.id = user.id;
-				token.role = user.role;
-				token.permissions = user.permissions;
-				token.name = user.name;
-				token.email = user.email;
-				token.image = user.image;
+				type AuthUser = {
+					id: string;
+					role: UserRole;
+					permissions: Permission[];
+					name?: string | null;
+					email?: string | null;
+					image?: string | null;
+					gymProfileId?: string | null;
+				};
+
+				const authUser = user as AuthUser;
+
+				token.id = authUser.id;
+				token.role = authUser.role;
+				token.permissions = authUser.permissions;
+				token.name = authUser.name;
+				token.email = authUser.email;
+				token.image = authUser.image;
+				token.gymProfileId = authUser.gymProfileId ?? null;
 			}
 			return token;
 		},
@@ -97,6 +109,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 				session.user.name = token.name as string;
 				session.user.email = token.email as string;
 				session.user.image = token.image as string;
+				session.user.gymProfileId = (token.gymProfileId as string | null) ?? null;
 			}
 			return session;
 		},

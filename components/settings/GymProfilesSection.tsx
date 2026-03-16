@@ -53,6 +53,8 @@ export default function GymProfilesSection({
 		email: "",
 		logoUrl: null,
 		watermarkUrl: null,
+		adminUsername: "",
+		adminPassword: "",
 	});
 	const [logoUploading, setLogoUploading] = useState(false);
 	const [watermarkUploading, setWatermarkUploading] = useState(false);
@@ -68,6 +70,8 @@ export default function GymProfilesSection({
 			email: "",
 			logoUrl: null,
 			watermarkUrl: null,
+			adminUsername: "",
+			adminPassword: "",
 		});
 		setEditingId(null);
 		setOpen(false);
@@ -89,6 +93,8 @@ export default function GymProfilesSection({
 			email: p.email ?? "",
 			logoUrl: logoUrl ?? null,
 			watermarkUrl: watermarkUrl ?? null,
+			adminUsername: "",
+			adminPassword: "",
 		});
 		setEditingId(p.id);
 		setOpen(true);
@@ -159,6 +165,12 @@ export default function GymProfilesSection({
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!form.name.trim()) return;
+		if (!editingId) {
+			if (!form.adminUsername?.trim() || !form.adminPassword?.trim()) {
+				toast.error("Please enter username and password for the gym admin user.");
+				return;
+			}
+		}
 		if (editingId) {
 			await updateGymProfile(editingId, form);
 		} else {
@@ -371,6 +383,35 @@ export default function GymProfilesSection({
 										/>
 									</div>
 								</div>
+								{!editingId && (
+									<div className="grid grid-cols-2 gap-4">
+										<div className="space-y-2">
+											<Label htmlFor="adminUsername">Admin Username *</Label>
+											<Input
+												id="adminUsername"
+												value={form.adminUsername}
+												onChange={(e) =>
+													setForm((f) => ({ ...f, adminUsername: e.target.value }))
+												}
+												placeholder="e.g. probodyline_admin"
+												required
+											/>
+										</div>
+										<div className="space-y-2">
+											<Label htmlFor="adminPassword">Admin Password *</Label>
+											<Input
+												id="adminPassword"
+												type="password"
+												value={form.adminPassword}
+												onChange={(e) =>
+													setForm((f) => ({ ...f, adminPassword: e.target.value }))
+												}
+												placeholder="Minimum 8 characters"
+												required
+											/>
+										</div>
+									</div>
+								)}
 								<DialogFooter>
 									<Button
 										type="button"

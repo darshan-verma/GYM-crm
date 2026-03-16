@@ -16,10 +16,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { User, Bell, Shield, Palette, Building2 } from "lucide-react";
-import { getGymProfiles, getActiveGymProfileId } from "@/lib/actions/gym-profiles";
+import { getGymProfiles, getActiveGymProfileId, getCurrentGymProfile } from "@/lib/actions/gym-profiles";
 import GymProfilesSection from "@/components/settings/GymProfilesSection";
+import MyGymProfileCard from "@/components/settings/MyGymProfileCard";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+	searchParams,
+}: {
+	searchParams: Promise<{ tab?: string }>;
+}) {
 	const session = await auth();
 
 	if (!session || !session.user) {
@@ -30,10 +35,20 @@ export default async function SettingsPage() {
 		redirect("/");
 	}
 
-	const [profiles, activeId] = await Promise.all([
-		getGymProfiles(),
-		getActiveGymProfileId(),
-	]);
+	const isSuperAdmin = session.user.role === "SUPER_ADMIN";
+	const currentGym = await getCurrentGymProfile(session);
+
+	// Only super admin may see "Gym Profiles" (create/manage all gyms). Redirect others away.
+	const { tab } = await searchParams;
+	if (!isSuperAdmin && tab === "gym-profiles") {
+		redirect("/settings");
+	}
+
+	const [profiles, activeId] = isSuperAdmin
+		? await Promise.all([getGymProfiles(), getActiveGymProfileId()])
+		: [[], null as string | null];
+
+	const defaultTab = isSuperAdmin ? "gym-profiles" : "profile";
 
 	return (
 		<div className="space-y-6">
@@ -46,12 +61,20 @@ export default async function SettingsPage() {
 			</div>
 
 			{/* Settings Tabs */}
-			<Tabs defaultValue="gym-profiles" className="space-y-6">
+			<Tabs defaultValue={defaultTab} className="space-y-6">
 				<TabsList>
-					<TabsTrigger value="gym-profiles">
-						<Building2 className="w-4 h-4 mr-2" />
-						Gym Profiles
-					</TabsTrigger>
+					{isSuperAdmin && (
+						<TabsTrigger value="gym-profiles">
+							<Building2 className="w-4 h-4 mr-2" />
+							Gym Profiles
+						</TabsTrigger>
+					)}
+					{!isSuperAdmin && currentGym && (
+						<TabsTrigger value="my-gym">
+							<Building2 className="w-4 h-4 mr-2" />
+							My gym
+						</TabsTrigger>
+					)}
 					<TabsTrigger value="profile">
 						<User className="w-4 h-4 mr-2" />
 						Profile
@@ -70,10 +93,19 @@ export default async function SettingsPage() {
 					</TabsTrigger>
 				</TabsList>
 
-				{/* Gym Profiles Tab */}
-				<TabsContent value="gym-profiles" className="space-y-6">
-					<GymProfilesSection profiles={profiles} activeId={activeId} />
-				</TabsContent>
+				{/* Gym Profiles Tab - SUPER_ADMIN only */}
+				{isSuperAdmin && (
+					<TabsContent value="gym-profiles" className="space-y-6">
+						<GymProfilesSection profiles={profiles} activeId={activeId} />
+					</TabsContent>
+				)}
+
+				{/* My gym - non–super-admin with a current gym */}
+				{!isSuperAdmin && currentGym && (
+					<TabsContent value="my-gym" className="space-y-6">
+						<MyGymProfileCard profile={currentGym} />
+					</TabsContent>
+				)}
 
 				{/* Profile Tab */}
 				<TabsContent value="profile" className="space-y-6">

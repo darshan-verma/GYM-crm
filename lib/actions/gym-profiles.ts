@@ -3,6 +3,7 @@
 import prisma from "@/lib/db/prisma";
 import { revalidatePath } from "next/cache";
 import type { GymProfile } from "@prisma/client";
+import type { Session } from "next-auth";
 
 const ACTIVE_GYM_PROFILE_KEY = "activeGymProfileId";
 
@@ -14,6 +15,8 @@ export type GymProfileFormData = {
 	email?: string;
 	logoUrl?: string | null;
 	watermarkUrl?: string | null;
+	adminUsername?: string;
+	adminPassword?: string;
 };
 
 export async function getGymProfiles(): Promise<GymProfile[]> {
@@ -44,6 +47,46 @@ export async function getActiveGymProfileId(): Promise<string | null> {
 	return setting.value;
 }
 
+// Resolve the "current" gym profile for a request based on the session.
+// - Gym-scoped users: use their linked gymProfileId (from session or fresh from DB)
+// - SUPER_ADMIN: fall back to the globally active gym profile setting
+// - ADMIN without gymProfileId: fallback match by user email to gym profile email (e.g. existing gym admins)
+export async function getCurrentGymProfile(
+	session: Session | null
+): Promise<GymProfile | null> {
+	// 1) Use gymProfileId from session if present
+	let gymId: string | null = session?.user?.gymProfileId ?? null;
+
+	// 2) For ADMIN, if no gym in session, refresh from DB (handles old JWTs or backfilled gymProfileId)
+	if (!gymId && session?.user?.id && session?.user?.role === "ADMIN") {
+		const dbUser = await prisma.user.findUnique({
+			where: { id: session.user.id },
+		});
+		gymId = dbUser?.gymProfileId ?? null;
+	}
+
+	if (gymId) {
+		const gym = await prisma.gymProfile.findUnique({
+			where: { id: gymId },
+		});
+		if (gym) return gym;
+	}
+
+	if (session?.user?.role === "SUPER_ADMIN") {
+		return getActiveGymProfile();
+	}
+
+	// 3) Fallback for gym admins created before user.gymProfileId existed: match by email
+	if (session?.user?.role === "ADMIN" && session.user.email) {
+		const gymByEmail = await prisma.gymProfile.findFirst({
+			where: { email: { equals: session.user.email, mode: "insensitive" } },
+		});
+		if (gymByEmail) return gymByEmail;
+	}
+
+	return null;
+}
+
 export async function createGymProfile(data: GymProfileFormData) {
 	const profile = await prisma.gymProfile.create({
 		data: {
@@ -56,6 +99,32 @@ export async function createGymProfile(data: GymProfileFormData) {
 			watermarkUrl: data.watermarkUrl?.trim() || null,
 		},
 	});
+
+	// Create initial admin user for this gym profile
+	if (data.adminUsername && data.adminPassword) {
+		const bcrypt = await import("bcryptjs");
+		const hashedPassword = await bcrypt.hash(data.adminPassword, 10);
+
+		try {
+			await prisma.user.create({
+				data: {
+					email:
+						data.email?.trim() ||
+						`${data.adminUsername.trim()}+${profile.id}@example.com`,
+					username: data.adminUsername.trim(),
+					password: hashedPassword,
+					name: `${profile.name} Admin`,
+					role: "ADMIN",
+					active: true,
+					gymProfileId: profile.id,
+				},
+			});
+		} catch (error) {
+			console.error("Failed to create gym admin user:", error);
+			// We intentionally do not fail the whole operation if user creation fails.
+		}
+	}
+
 	revalidatePath("/settings");
 	return { success: true, profile };
 }

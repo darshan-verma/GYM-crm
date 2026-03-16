@@ -114,6 +114,7 @@ export default function Sidebar({
 	user,
 	gymTitle = "Pro Bodyline",
 	gymLogoUrl = null,
+	gymDescription = "Fitness CRM",
 }: {
 	user: {
 		id: string;
@@ -125,6 +126,7 @@ export default function Sidebar({
 	};
 	gymTitle?: string;
 	gymLogoUrl?: string | null;
+	gymDescription?: string | null;
 }) {
 	const pathname = usePathname();
 	const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -175,7 +177,11 @@ export default function Sidebar({
 						)}
 						<div className="min-w-0">
 							<h1 className="font-bold text-lg leading-tight truncate">{gymTitle}</h1>
-							<p className="text-xs text-muted-foreground">Fitness CRM</p>
+							{gymDescription && (
+								<p className="text-xs text-muted-foreground truncate">
+									{gymDescription}
+								</p>
+							)}
 						</div>
 					</div>
 

@@ -141,6 +141,7 @@ model Role {
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
+  username     String?  @unique
   password     String
   name         String
   role         UserRole @default(RECEPTIONIST)
@@ -151,6 +152,8 @@ model User {
   avatar       String?
   active       Boolean  @default(true)
   lastLogin    DateTime?
+  gymProfileId String?
+  gymProfile   GymProfile? @relation(fields: [gymProfileId], references: [id], onDelete: SetNull)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -187,6 +190,9 @@ model Member {
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
+  gymProfileId String?
+  gymProfile   GymProfile? @relation(fields: [gymProfileId], references: [id], onDelete: SetNull)
+
   trainerId String?
   trainer   User?   @relation("TrainerMembers", fields: [trainerId], references: [id], onDelete: SetNull)
 
@@ -199,6 +205,7 @@ model Member {
   @@index([phone])
   @@index([status])
   @@index([trainerId])
+  @@index([gymProfileId])
   @@index([createdAt])
 }
 
@@ -216,9 +223,13 @@ model MembershipPlan {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  gymProfileId String?
+  gymProfile   GymProfile? @relation(fields: [gymProfileId], references: [id], onDelete: SetNull)
+
   memberships Membership[]
 
   @@index([active])
+  @@index([gymProfileId])
 }
 
 model Membership {
@@ -310,9 +321,13 @@ model Lead {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
+  gymProfileId String?
+  gymProfile   GymProfile? @relation(fields: [gymProfileId], references: [id], onDelete: SetNull)
+
   @@index([status])
   @@index([source])
   @@index([followUpDate])
+  @@index([gymProfileId])
   @@index([createdAt])
 }
 
@@ -430,6 +445,10 @@ model GymProfile {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  users      User[]
+  members    Member[]
+  plans      MembershipPlan[]
+  leads      Lead[]
   promotions Promotion[]
 
   @@index([name])

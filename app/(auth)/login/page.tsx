@@ -25,12 +25,12 @@ export default function LoginPage() {
 		setLoading(true);
 
 		const formData = new FormData(e.currentTarget);
-		const email = formData.get("email") as string;
+		const identifier = formData.get("identifier") as string;
 		const password = formData.get("password") as string;
 
 		try {
 			const result = await signIn("credentials", {
-				email,
+				identifier,
 				password,
 				redirect: false,
 			});
@@ -80,12 +80,12 @@ export default function LoginPage() {
 					<CardContent>
 						<form onSubmit={handleSubmit} className="space-y-4">
 							<div className="space-y-2">
-								<Label htmlFor="email">Email</Label>
+								<Label htmlFor="identifier">Email or Username</Label>
 								<Input
-									id="email"
-									name="email"
-									type="email"
-									placeholder="admin@probodyline.com"
+									id="identifier"
+									name="identifier"
+									type="text"
+									placeholder="admin@probodyline.com or admin"
 									required
 									disabled={loading}
 									className="h-11"

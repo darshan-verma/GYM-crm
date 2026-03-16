@@ -1,5 +1,6 @@
+import { auth } from "@/lib/auth";
 import { getPayment } from "@/lib/actions/payments";
-import { getActiveGymProfile } from "@/lib/actions/gym-profiles";
+import { getCurrentGymProfile } from "@/lib/actions/gym-profiles";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
@@ -61,9 +62,14 @@ export default async function InvoiceDetailPage({
 	params: Promise<{ id: string }>;
 }) {
 	const { id } = await params;
+	const session = await auth();
+	if (!session || !session.user) {
+		notFound();
+	}
+
 	const [paymentData, gymProfile] = await Promise.all([
 		getPayment(id),
-		getActiveGymProfile(),
+		getCurrentGymProfile(session),
 	]);
 
 	if (!paymentData) {
