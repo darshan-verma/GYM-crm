@@ -1,16 +1,179 @@
-import { getLeadsByStatus, getLeadStats } from "@/lib/actions/leads";
+import { auth } from "@/lib/auth";
+import {
+	getLeadsByStatus,
+	getLeadStats,
+	getLeadsByStatusForGymPaginated,
+	getLeadStatsForGymProfile,
+} from "@/lib/actions/leads";
+import { getGymProfilesPaginated } from "@/lib/actions/gym-profiles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus, Users, TrendingUp, Phone, Download } from "lucide-react";
 import Link from "next/link";
 import LeadsPipeline from "@/components/leads/LeadsPipeline";
 import ImportLeadsDialog from "@/components/leads/ImportLeadsDialog";
+import GymProfilesTable from "@/components/gym-profiles/GymProfilesTable";
+import LeadsPagination from "@/components/leads/LeadsPagination";
+import type { Lead, LeadStatus } from "@prisma/client";
 
-export default async function LeadsPage() {
-	const [leadsByStatus, stats] = await Promise.all([
-		getLeadsByStatus(),
-		getLeadStats(),
-	]);
+interface SearchParams {
+	gymProfileId?: string;
+	page?: string;
+	limit?: string;
+	search?: string;
+}
+
+export default async function LeadsPage({
+	searchParams,
+}: {
+	searchParams: Promise<SearchParams>;
+}) {
+	const params = await searchParams;
+	const session = await auth();
+
+	const isSuperAdmin = session?.user?.role === "SUPER_ADMIN";
+	const gymProfileId = params.gymProfileId?.trim() || null;
+	const page = params.page ? parseInt(params.page, 10) : 1;
+	const limit = params.limit ? parseInt(params.limit, 10) : 20;
+
+	if (isSuperAdmin && !gymProfileId) {
+		const gyms = await getGymProfilesPaginated({
+			search: params.search,
+			page: Number.isFinite(page) && page > 0 ? page : 1,
+			limit: Number.isFinite(limit) && limit > 0 ? limit : 20,
+		});
+
+		const serializedGyms = JSON.parse(JSON.stringify(gyms.profiles)) as typeof gyms.profiles;
+
+		return (
+			<div className="space-y-6">
+				<div>
+					<h1 className="text-3xl font-bold tracking-tight">Leads</h1>
+					<p className="text-muted-foreground mt-1">
+						Select a gym profile to view its leads
+					</p>
+				</div>
+
+				<Card>
+					<GymProfilesTable
+						profiles={serializedGyms}
+						total={gyms.total}
+						currentPage={gyms.currentPage}
+						totalPages={gyms.pages}
+						limit={limit}
+					/>
+				</Card>
+			</div>
+		);
+	}
+
+	if (isSuperAdmin && gymProfileId) {
+		const [paged, stats] = await Promise.all([
+			getLeadsByStatusForGymPaginated({
+				gymProfileId,
+				page: Number.isFinite(page) && page > 0 ? page : 1,
+				limit: Number.isFinite(limit) && limit > 0 ? limit : 20,
+			}),
+			getLeadStatsForGymProfile(gymProfileId),
+		]);
+
+		const serializedLeadsByStatus: Record<LeadStatus, Lead[]> = {
+			NEW: JSON.parse(JSON.stringify(paged.leadsByStatus.NEW)) as Lead[],
+			CONTACTED: JSON.parse(JSON.stringify(paged.leadsByStatus.CONTACTED)) as Lead[],
+			FOLLOW_UP: JSON.parse(JSON.stringify(paged.leadsByStatus.FOLLOW_UP)) as Lead[],
+			CONVERTED: JSON.parse(JSON.stringify(paged.leadsByStatus.CONVERTED)) as Lead[],
+			LOST: JSON.parse(JSON.stringify(paged.leadsByStatus.LOST)) as Lead[],
+		};
+
+		const followUpCount = paged.statusCounts?.FOLLOW_UP ?? 0;
+
+		return (
+			<div className="space-y-6">
+				{/* Header */}
+				<div className="flex items-center justify-between">
+					<div>
+						<h1 className="text-3xl font-bold tracking-tight">
+							Leads Management
+						</h1>
+						<p className="text-muted-foreground mt-1">
+							View-only (Super Admin) • Gym: {gymProfileId}
+						</p>
+					</div>
+					<div className="flex gap-3">
+						<Button variant="outline" asChild>
+							<Link href="/leads">Back to gyms</Link>
+						</Button>
+					</div>
+				</div>
+
+				{/* Stats Cards */}
+				<div className="grid gap-4 md:grid-cols-3">
+					<Card className="hover:shadow-md transition-shadow">
+						<CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+							<CardTitle className="text-sm font-medium text-muted-foreground">
+								Total Leads
+							</CardTitle>
+							<div className="p-2 rounded-lg bg-blue-500/10 text-blue-700">
+								<Users className="w-4 h-4" />
+							</div>
+						</CardHeader>
+						<CardContent>
+							<div className="text-2xl font-bold">{stats.total}</div>
+						</CardContent>
+					</Card>
+
+					<Card className="hover:shadow-md transition-shadow">
+						<CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+							<CardTitle className="text-sm font-medium text-muted-foreground">
+								Converted
+							</CardTitle>
+							<div className="p-2 rounded-lg bg-green-500/10 text-green-700">
+								<TrendingUp className="w-4 h-4" />
+							</div>
+						</CardHeader>
+						<CardContent>
+							<div className="text-2xl font-bold">{stats.converted}</div>
+							<p className="text-xs text-muted-foreground mt-1">
+								{stats.conversionRate}% conversion rate
+							</p>
+						</CardContent>
+					</Card>
+
+					<Card className="hover:shadow-md transition-shadow">
+						<CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+							<CardTitle className="text-sm font-medium text-muted-foreground">
+								Need Follow-up
+							</CardTitle>
+							<div className="p-2 rounded-lg bg-orange-500/10 text-orange-700">
+								<Phone className="w-4 h-4" />
+							</div>
+						</CardHeader>
+						<CardContent>
+							<div className="text-2xl font-bold">{followUpCount}</div>
+						</CardContent>
+					</Card>
+				</div>
+
+				{/* Leads Pipeline (read-only + paginated) */}
+				<Card>
+					<CardContent className="p-6">
+						<LeadsPipeline
+							leadsByStatus={serializedLeadsByStatus}
+							statusCounts={paged.statusCounts}
+							readOnly
+						/>
+					</CardContent>
+					<LeadsPagination
+						total={paged.total}
+						currentPage={paged.currentPage}
+						totalPages={paged.pages}
+					/>
+				</Card>
+			</div>
+		);
+	}
+
+	const [leadsByStatus, stats] = await Promise.all([getLeadsByStatus(), getLeadStats()]);
 
 	// Serialize the data to convert Decimal objects to plain numbers
 	const serializedLeadsByStatus = {

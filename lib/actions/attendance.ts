@@ -4,6 +4,8 @@ import prisma from "@/lib/db/prisma";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek } from "date-fns";
+import { requireCurrentGymProfileId } from "./gym-profiles";
+import { createActivityLog } from "@/lib/utils/activityLog";
 
 export async function markAttendance(data: {
 	memberId: string;
@@ -12,8 +14,16 @@ export async function markAttendance(data: {
 }) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
+		// Ensure member belongs to this gym
+		const member = await prisma.member.findUnique({
+			where: { id: data.memberId, gymProfileId },
+			select: { id: true },
+		});
+		if (!member) throw new Error("Member not found");
+
 		const today = new Date();
 		today.setHours(0, 0, 0, 0);
 
@@ -51,6 +61,7 @@ export async function markAttendance(data: {
 			attendance = await prisma.attendance.create({
 				data: {
 					memberId: data.memberId,
+					gymProfileId,
 					checkIn: data.checkIn || new Date(),
 					date: today,
 				},
@@ -58,14 +69,12 @@ export async function markAttendance(data: {
 		}
 
 		// Log activity
-		await prisma.activityLog.create({
-			data: {
-				userId: session.user.id,
-				action: existing ? "CHECKOUT" : "CHECKIN",
-				entity: "Attendance",
-				entityId: attendance.id,
-				details: { memberId: data.memberId },
-			},
+		await createActivityLog({
+			userId: session.user.id,
+			action: existing ? "CHECKOUT" : "CHECKIN",
+			entity: "Attendance",
+			entityId: attendance.id,
+			details: { memberId: data.memberId },
 		});
 
 		revalidatePath("/attendance");
@@ -84,10 +93,11 @@ export async function markAttendance(data: {
 export async function quickCheckIn(membershipNumber: string) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
-		const member = await prisma.member.findUnique({
-			where: { membershipNumber },
+		const member = await prisma.member.findFirst({
+			where: { membershipNumber, gymProfileId },
 			include: {
 				memberships: {
 					where: { active: true },
@@ -126,6 +136,10 @@ export async function getAttendance(params?: {
 	page?: number;
 	limit?: number;
 }) {
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
 	const {
 		memberId,
 		date,
@@ -135,7 +149,7 @@ export async function getAttendance(params?: {
 		limit = 30,
 	} = params || {};
 
-	const where: Record<string, unknown> = {};
+	const where: Record<string, unknown> = { gymProfileId };
 
 	if (memberId) {
 		where.memberId = memberId;
@@ -183,6 +197,10 @@ export async function getAttendance(params?: {
 export async function getAttendanceStats(
 	period: "today" | "week" | "month" = "today"
 ) {
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
 	const now = new Date();
 	let startDate: Date;
 	let endDate: Date = new Date();
@@ -205,11 +223,13 @@ export async function getAttendanceStats(
 	const [totalCheckIns, uniqueMembers, avgDuration] = await Promise.all([
 		prisma.attendance.count({
 			where: {
+				gymProfileId,
 				date: { gte: startDate, lte: endDate },
 			},
 		}),
 		prisma.attendance.findMany({
 			where: {
+				gymProfileId,
 				date: { gte: startDate, lte: endDate },
 			},
 			distinct: ["memberId"],
@@ -217,6 +237,7 @@ export async function getAttendanceStats(
 		}),
 		prisma.attendance.aggregate({
 			where: {
+				gymProfileId,
 				date: { gte: startDate, lte: endDate },
 				duration: { not: null },
 			},

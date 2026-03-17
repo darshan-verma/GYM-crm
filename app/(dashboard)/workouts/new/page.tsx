@@ -3,11 +3,17 @@ import prisma from "@/lib/db/prisma";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getExercises } from "@/lib/actions/exercises";
+import { auth } from "@/lib/auth";
+import { requireCurrentGymProfileId } from "@/lib/actions/gym-profiles";
 
 export default async function NewWorkoutPlanPage() {
+	const session = await auth();
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
 	const members = await prisma.member.findMany({
 		where: {
 			status: "ACTIVE",
+			gymProfileId,
 		},
 		select: {
 			id: true,

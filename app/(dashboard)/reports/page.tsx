@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth";
-import { requireAdmin } from "@/lib/utils/permissions";
+import { requireAdminOrSuperAdmin } from "@/lib/utils/permissions";
 import { redirect } from "next/navigation";
 import {
 	Card,
@@ -31,11 +31,23 @@ import {
 	getAttendanceByDayOfWeek,
 	getLeadsReport,
 	getLeadsBySource,
+	getOverallStatsForGymProfile,
+	getRevenueReportForGymProfile,
+	getPaymentModeDistributionForGymProfile,
+	getTopRevenueByPlanForGymProfile,
+	getMembershipReportForGymProfile,
+	getMembershipStatusDistributionForGymProfile,
+	getAttendanceReportForGymProfile,
+	getAttendanceByDayOfWeekForGymProfile,
+	getLeadsReportForGymProfile,
+	getLeadsBySourceForGymProfile,
 } from "@/lib/actions/reports";
 import RevenueChart from "@/components/reports/RevenueChart";
 import MembershipChart from "@/components/reports/MembershipChart";
 import AttendanceChart from "@/components/reports/AttendanceChart";
 import LeadsChart from "@/components/reports/LeadsChart";
+import { getGymProfilesPaginated } from "@/lib/actions/gym-profiles";
+import GymProfilesReportsTable from "@/components/gym-profiles/GymProfilesReportsTable";
 
 interface TopPlan {
 	name: string;
@@ -43,11 +55,71 @@ interface TopPlan {
 	count: number;
 }
 
-export default async function ReportsPage() {
+interface SearchParams {
+	gymProfileId?: string;
+	search?: string;
+	page?: string;
+	limit?: string;
+}
+
+export default async function ReportsPage({
+	searchParams,
+}: {
+	searchParams?: Promise<SearchParams>;
+}) {
 	const session = await auth();
 
-	if (!requireAdmin(session?.user?.role)) {
+	if (!requireAdminOrSuperAdmin(session?.user?.role)) {
 		redirect("/");
+	}
+
+	const isSuperAdmin = session?.user?.role === "SUPER_ADMIN";
+	const params = await searchParams;
+	const gymProfileId = params?.gymProfileId?.trim() || null;
+	const page = params?.page ? parseInt(params.page, 10) : 1;
+	const limit = params?.limit ? parseInt(params.limit, 10) : 20;
+
+	if (isSuperAdmin && !gymProfileId) {
+		const gyms = await getGymProfilesPaginated({
+			search: params?.search,
+			page: Number.isFinite(page) && page > 0 ? page : 1,
+			limit: Number.isFinite(limit) && limit > 0 ? limit : 20,
+		});
+
+		const serializedGyms = JSON.parse(
+			JSON.stringify(gyms.profiles)
+		) as typeof gyms.profiles;
+
+		return (
+			<div className="space-y-6">
+				<div className="flex items-center justify-between">
+					<div>
+						<h1 className="text-3xl font-bold tracking-tight">
+							Reports & Analytics
+						</h1>
+						<p className="text-muted-foreground mt-1">
+							Select a gym profile to view its reports
+						</p>
+					</div>
+					<Button variant="outline" asChild>
+						<Link href="/api/export/reports">
+							<Download className="w-4 h-4 mr-2" />
+							Export Report
+						</Link>
+					</Button>
+				</div>
+
+				<Card>
+					<GymProfilesReportsTable
+						profiles={serializedGyms}
+						total={gyms.total}
+						currentPage={gyms.currentPage}
+						totalPages={gyms.pages}
+						limit={limit}
+					/>
+				</Card>
+			</div>
+		);
 	}
 
 	const [
@@ -62,16 +134,36 @@ export default async function ReportsPage() {
 		leadsData,
 		leadsBySource,
 	] = await Promise.all([
-		getOverallStats(),
-		getRevenueReport(6),
-		getPaymentModeDistribution(),
-		getTopRevenueByPlan(),
-		getMembershipReport(6),
-		getMembershipStatusDistribution(),
-		getAttendanceReport(6),
-		getAttendanceByDayOfWeek(),
-		getLeadsReport(6),
-		getLeadsBySource(),
+		isSuperAdmin && gymProfileId
+			? getOverallStatsForGymProfile(gymProfileId)
+			: getOverallStats(),
+		isSuperAdmin && gymProfileId
+			? getRevenueReportForGymProfile(gymProfileId, 6)
+			: getRevenueReport(6),
+		isSuperAdmin && gymProfileId
+			? getPaymentModeDistributionForGymProfile(gymProfileId)
+			: getPaymentModeDistribution(),
+		isSuperAdmin && gymProfileId
+			? getTopRevenueByPlanForGymProfile(gymProfileId)
+			: getTopRevenueByPlan(),
+		isSuperAdmin && gymProfileId
+			? getMembershipReportForGymProfile(gymProfileId, 6)
+			: getMembershipReport(6),
+		isSuperAdmin && gymProfileId
+			? getMembershipStatusDistributionForGymProfile(gymProfileId)
+			: getMembershipStatusDistribution(),
+		isSuperAdmin && gymProfileId
+			? getAttendanceReportForGymProfile(gymProfileId, 6)
+			: getAttendanceReport(6),
+		isSuperAdmin && gymProfileId
+			? getAttendanceByDayOfWeekForGymProfile(gymProfileId)
+			: getAttendanceByDayOfWeek(),
+		isSuperAdmin && gymProfileId
+			? getLeadsReportForGymProfile(gymProfileId, 6)
+			: getLeadsReport(6),
+		isSuperAdmin && gymProfileId
+			? getLeadsBySourceForGymProfile(gymProfileId)
+			: getLeadsBySource(),
 	]);
 
 	return (
@@ -83,15 +175,24 @@ export default async function ReportsPage() {
 						Reports & Analytics
 					</h1>
 					<p className="text-muted-foreground mt-1">
-						View detailed reports and business analytics
+						{isSuperAdmin && gymProfileId
+							? `Gym reports (Super Admin) • Gym: ${gymProfileId}`
+							: "View detailed reports and business analytics"}
 					</p>
 				</div>
-				<Button variant="outline" asChild>
-					<Link href="/api/export/reports">
-						<Download className="w-4 h-4 mr-2" />
-						Export Report
-					</Link>
-				</Button>
+				<div className="flex gap-3">
+					{isSuperAdmin && gymProfileId ? (
+						<Button variant="outline" asChild>
+							<Link href="/reports">Back to gyms</Link>
+						</Button>
+					) : null}
+					<Button variant="outline" asChild>
+						<Link href="/api/export/reports">
+							<Download className="w-4 h-4 mr-2" />
+							Export Report
+						</Link>
+					</Button>
+				</div>
 			</div>
 
 			{/* Quick Stats */}

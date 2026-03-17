@@ -119,6 +119,7 @@ enum InAppNotificationType {
   PAYMENT_DUE
   MEMBERSHIP_EXPIRING
   NEW_MEMBER
+  ANNOUNCEMENT
 }
 
 enum InAppNotificationStatus {
@@ -152,8 +153,8 @@ model User {
   avatar       String?
   active       Boolean  @default(true)
   lastLogin    DateTime?
-  gymProfileId String?
-  gymProfile   GymProfile? @relation(fields: [gymProfileId], references: [id], onDelete: SetNull)
+  gymProfileId String
+  gymProfile   GymProfile @relation(fields: [gymProfileId], references: [id], onDelete: Restrict)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -190,8 +191,8 @@ model Member {
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
-  gymProfileId String?
-  gymProfile   GymProfile? @relation(fields: [gymProfileId], references: [id], onDelete: SetNull)
+  gymProfileId String
+  gymProfile   GymProfile @relation(fields: [gymProfileId], references: [id], onDelete: Restrict)
 
   trainerId String?
   trainer   User?   @relation("TrainerMembers", fields: [trainerId], references: [id], onDelete: SetNull)
@@ -223,8 +224,8 @@ model MembershipPlan {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  gymProfileId String?
-  gymProfile   GymProfile? @relation(fields: [gymProfileId], references: [id], onDelete: SetNull)
+  gymProfileId String
+  gymProfile   GymProfile @relation(fields: [gymProfileId], references: [id], onDelete: Restrict)
 
   memberships Membership[]
 
@@ -248,6 +249,9 @@ model Membership {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  gymProfileId String
+  gymProfile   GymProfile @relation(fields: [gymProfileId], references: [id], onDelete: Restrict)
+
   member Member         @relation(fields: [memberId], references: [id], onDelete: Cascade)
   plan   MembershipPlan @relation(fields: [planId], references: [id])
 
@@ -255,6 +259,7 @@ model Membership {
   @@index([planId])
   @@index([endDate])
   @@index([active])
+  @@index([gymProfileId])
 }
 
 model Payment {
@@ -277,11 +282,15 @@ model Payment {
   createdBy       String?
   createdAt       DateTime    @default(now())
 
+  gymProfileId String
+  gymProfile   GymProfile @relation(fields: [gymProfileId], references: [id], onDelete: Restrict)
+
   member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
 
   @@index([memberId])
   @@index([paymentDate])
   @@index([invoiceNumber])
+  @@index([gymProfileId])
 }
 
 model Attendance {
@@ -293,11 +302,15 @@ model Attendance {
   duration Int? // in minutes
   notes    String?
 
+  gymProfileId String
+  gymProfile   GymProfile @relation(fields: [gymProfileId], references: [id], onDelete: Restrict)
+
   member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
 
   @@unique([memberId, date])
   @@index([date])
   @@index([memberId])
+  @@index([gymProfileId])
 }
 
 model Lead {
@@ -321,8 +334,8 @@ model Lead {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
-  gymProfileId String?
-  gymProfile   GymProfile? @relation(fields: [gymProfileId], references: [id], onDelete: SetNull)
+  gymProfileId String
+  gymProfile   GymProfile @relation(fields: [gymProfileId], references: [id], onDelete: Restrict)
 
   @@index([status])
   @@index([source])
@@ -345,12 +358,16 @@ model WorkoutPlan {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  gymProfileId String
+  gymProfile   GymProfile @relation(fields: [gymProfileId], references: [id], onDelete: Restrict)
+
   member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
   goal   FitnessGoal? @relation(fields: [goalId], references: [id], onDelete: SetNull)
 
   @@index([memberId])
   @@index([active])
   @@index([goalId])
+  @@index([gymProfileId])
 }
 
 model DietPlan {
@@ -369,12 +386,16 @@ model DietPlan {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  gymProfileId String
+  gymProfile   GymProfile @relation(fields: [gymProfileId], references: [id], onDelete: Restrict)
+
   member   Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
   dietType DietType? @relation(fields: [dietTypeId], references: [id], onDelete: SetNull)
 
   @@index([memberId])
   @@index([active])
   @@index([dietTypeId])
+  @@index([gymProfileId])
 }
 
 model FitnessGoal {
@@ -417,11 +438,15 @@ model ActivityLog {
   userAgent String?
   createdAt DateTime @default(now())
 
+  gymProfileId String
+  gymProfile   GymProfile @relation(fields: [gymProfileId], references: [id], onDelete: Restrict)
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([entity])
   @@index([createdAt])
+  @@index([gymProfileId])
 }
 
 model SystemSettings {
@@ -445,18 +470,25 @@ model GymProfile {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  users      User[]
-  members    Member[]
-  plans      MembershipPlan[]
-  leads      Lead[]
-  promotions Promotion[]
+  users             User[]
+  members           Member[]
+  plans             MembershipPlan[]
+  leads             Lead[]
+  promotions        Promotion[]
+  memberships       Membership[]
+  payments          Payment[]
+  attendances       Attendance[]
+  workoutPlans      WorkoutPlan[]
+  dietPlans         DietPlan[]
+  activityLogs      ActivityLog[]
+  inAppNotifications InAppNotification[]
 
   @@index([name])
 }
 
 model Promotion {
   id          String   @id @default(cuid())
-  gymId      String?
+  gymProfileId String
   title      String
   description Json    // Tiptap JSON content
   ctaText    String?
@@ -464,10 +496,10 @@ model Promotion {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  gym    GymProfile?      @relation(fields: [gymId], references: [id], onDelete: SetNull)
+  gym    GymProfile      @relation(fields: [gymProfileId], references: [id], onDelete: Restrict)
   images PromotionImage[]
 
-  @@index([gymId])
+  @@index([gymProfileId])
   @@index([createdAt])
 }
 
@@ -480,6 +512,31 @@ model PromotionImage {
   promotion Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
 
   @@index([promotionId])
+}
+
+model Announcement {
+  id          String   @id @default(cuid())
+  title       String
+  description Json // Tiptap JSON content
+  ctaText     String?
+  ctaLink     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  images AnnouncementImage[]
+
+  @@index([createdAt])
+}
+
+model AnnouncementImage {
+  id             String @id @default(cuid())
+  announcementId String
+  imageUrl       String
+  position       Int
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  @@index([announcementId])
 }
 
 model DietType {
@@ -538,8 +595,12 @@ model InAppNotification {
   readAt      DateTime?
   dismissedAt DateTime?
 
+  gymProfileId String
+  gymProfile   GymProfile @relation(fields: [gymProfileId], references: [id], onDelete: Restrict)
+
   @@index([status])
   @@index([type])
   @@index([entityType, entityId])
   @@index([createdAt])
+  @@index([gymProfileId])
 }

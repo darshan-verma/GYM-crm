@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Bell, X, Check, Clock, DollarSign, UserPlus, AlertCircle } from "lucide-react";
+import { Bell, X, Check, Clock, DollarSign, UserPlus, AlertCircle, Megaphone } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -32,10 +32,12 @@ export default function NotificationPopup({ open, onOpenChange }: NotificationPo
     leads: NotificationItem[];
     payments: NotificationItem[];
     members: NotificationItem[];
+    announcements: NotificationItem[];
   }>({
     leads: [],
     payments: [],
     members: [],
+    announcements: [],
   });
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -113,6 +115,9 @@ export default function NotificationPopup({ open, onOpenChange }: NotificationPo
         router.push(`/members/${memberId}`);
         onOpenChange(false);
       }
+    } else if (notification.entityType === "Announcement" && notification.entityId) {
+      router.push(`/announcements/${notification.entityId}`);
+      onOpenChange(false);
     }
   };
 
@@ -126,6 +131,8 @@ export default function NotificationPopup({ open, onOpenChange }: NotificationPo
         return <AlertCircle className="w-4 h-4 text-red-500" />;
       case "NEW_MEMBER":
         return <UserPlus className="w-4 h-4 text-green-500" />;
+      case "ANNOUNCEMENT":
+        return <Megaphone className="w-4 h-4 text-purple-500" />;
       default:
         return <Bell className="w-4 h-4 text-gray-500" />;
     }
@@ -298,7 +305,7 @@ export default function NotificationPopup({ open, onOpenChange }: NotificationPo
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="leads" className="relative">
               Leads
               {notifications.leads.filter((n) => n.status === "UNREAD").length > 0 && (
@@ -320,6 +327,14 @@ export default function NotificationPopup({ open, onOpenChange }: NotificationPo
               {notifications.members.filter((n) => n.status === "UNREAD").length > 0 && (
                 <Badge className="ml-2 bg-green-500 text-white text-[10px] px-1.5 py-0">
                   {notifications.members.filter((n) => n.status === "UNREAD").length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="announcements" className="relative">
+              Announcements
+              {notifications.announcements.filter((n) => n.status === "UNREAD").length > 0 && (
+                <Badge className="ml-2 bg-purple-500 text-white text-[10px] px-1.5 py-0">
+                  {notifications.announcements.filter((n) => n.status === "UNREAD").length}
                 </Badge>
               )}
             </TabsTrigger>
@@ -363,6 +378,20 @@ export default function NotificationPopup({ open, onOpenChange }: NotificationPo
                 </div>
               ) : (
                 notifications.members.map((notification) => (
+                  <NotificationItem key={notification.id} notification={notification} />
+                ))
+              )}
+            </TabsContent>
+
+            <TabsContent value="announcements" className="mt-0">
+              {loading ? (
+                <div className="text-center py-8 text-sm text-gray-500">Loading...</div>
+              ) : notifications.announcements.length === 0 ? (
+                <div className="text-center py-8 text-sm text-gray-500">
+                  No announcements
+                </div>
+              ) : (
+                notifications.announcements.map((notification) => (
                   <NotificationItem key={notification.id} notification={notification} />
                 ))
               )}

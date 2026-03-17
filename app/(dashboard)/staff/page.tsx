@@ -1,4 +1,4 @@
-import { getUsers } from "@/lib/actions/users";
+import { getUsers, getUsersForGymProfile } from "@/lib/actions/users";
 import { auth } from "@/lib/auth";
 import { requireAdminOrSuperAdmin } from "@/lib/utils/permissions";
 import { redirect } from "next/navigation";
@@ -14,6 +14,8 @@ import {
 	Crown,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { getGymProfilesPaginated } from "@/lib/actions/gym-profiles";
+import GymProfilesStaffTable from "@/components/gym-profiles/GymProfilesStaffTable";
 
 interface StaffUser {
 	id: string;
@@ -25,14 +27,68 @@ interface StaffUser {
 	createdAt: Date;
 }
 
-export default async function StaffPage() {
+interface SearchParams {
+	gymProfileId?: string;
+	search?: string;
+	page?: string;
+	limit?: string;
+}
+
+export default async function StaffPage({
+	searchParams,
+}: {
+	searchParams?: Promise<SearchParams>;
+}) {
 	const session = await auth();
 
 	if (!requireAdminOrSuperAdmin(session?.user?.role)) {
 		redirect("/");
 	}
 
-	const users = await getUsers();
+	const isSuperAdmin = session?.user?.role === "SUPER_ADMIN";
+
+	const params = await searchParams;
+	const gymProfileId = params?.gymProfileId?.trim() || null;
+	const page = params?.page ? parseInt(params.page, 10) : 1;
+	const limit = params?.limit ? parseInt(params.limit, 10) : 20;
+
+	if (isSuperAdmin && !gymProfileId) {
+		const gyms = await getGymProfilesPaginated({
+			search: params?.search,
+			page: Number.isFinite(page) && page > 0 ? page : 1,
+			limit: Number.isFinite(limit) && limit > 0 ? limit : 20,
+		});
+
+		const serializedGyms = JSON.parse(
+			JSON.stringify(gyms.profiles)
+		) as typeof gyms.profiles;
+
+		return (
+			<div className="space-y-6">
+				<div>
+					<h1 className="text-3xl font-bold">Staff Management</h1>
+					<p className="text-muted-foreground mt-1">
+						Select a gym profile to view its staff
+					</p>
+				</div>
+
+				<div className="bg-white rounded-lg shadow overflow-hidden">
+					<GymProfilesStaffTable
+						profiles={serializedGyms}
+						total={gyms.total}
+						currentPage={gyms.currentPage}
+						totalPages={gyms.pages}
+						limit={limit}
+					/>
+				</div>
+			</div>
+		);
+	}
+
+	const users =
+		isSuperAdmin && gymProfileId
+			? await getUsersForGymProfile(gymProfileId)
+			: await getUsers();
 
 	const getRoleBadge = (user: StaffUser) => {
 		const role = user.role;
@@ -92,15 +148,23 @@ export default async function StaffPage() {
 				<div>
 					<h1 className="text-3xl font-bold">Staff Management</h1>
 					<p className="text-gray-600 mt-1">
-						Manage system users and their roles
+						{isSuperAdmin && gymProfileId
+							? `View-only (Super Admin) • Gym: ${gymProfileId}`
+							: "Manage system users and their roles"}
 					</p>
 				</div>
-				<Link href="/staff/new">
-					<Button>
-						<Plus className="h-4 w-4 mr-2" />
-						Add Staff Member
+				{isSuperAdmin && gymProfileId ? (
+					<Button variant="outline" asChild>
+						<Link href="/staff">Back to gyms</Link>
 					</Button>
-				</Link>
+				) : (
+					<Link href="/staff/new">
+						<Button>
+							<Plus className="h-4 w-4 mr-2" />
+							Add Staff Member
+						</Button>
+					</Link>
+				)}
 			</div>
 
 			{users.length === 0 ? (
@@ -168,11 +232,13 @@ export default async function StaffPage() {
 										{new Date(user.createdAt).toLocaleDateString()}
 									</td>
 									<td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-										<Link href={`/staff/${user.id}/edit`}>
-											<Button variant="ghost" size="sm">
-												Edit
-											</Button>
-										</Link>
+										{isSuperAdmin && gymProfileId ? null : (
+											<Link href={`/staff/${user.id}/edit`}>
+												<Button variant="ghost" size="sm">
+													Edit
+												</Button>
+											</Link>
+										)}
 									</td>
 								</tr>
 							))}

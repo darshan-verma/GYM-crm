@@ -9,11 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { createPromotion, updatePromotion, type PromoImageInput } from "@/lib/actions/promotions";
+import { createAnnouncement, updateAnnouncement } from "@/lib/actions/announcements";
 import { toast } from "sonner";
 import { Loader2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
 type PromotionFormProps = {
+	variant?: "promotion" | "announcement";
 	mode: "create" | "edit";
 	promotionId?: string;
 	initial?: {
@@ -26,6 +28,7 @@ type PromotionFormProps = {
 };
 
 export default function PromotionForm({
+	variant = "promotion",
 	mode,
 	promotionId,
 	initial,
@@ -60,41 +63,74 @@ export default function PromotionForm({
 
 		try {
 			if (mode === "create") {
-				const result = await createPromotion({
-					title,
-					description: descriptionPayload,
-					images: imagePayload,
-					ctaText: ctaText || null,
-					ctaLink: ctaLink || null,
-				});
+				const result =
+					variant === "announcement"
+						? await createAnnouncement({
+								title,
+								description: descriptionPayload,
+								images: imagePayload,
+								ctaText: ctaText || null,
+								ctaLink: ctaLink || null,
+							})
+						: await createPromotion({
+								title,
+								description: descriptionPayload,
+								images: imagePayload,
+								ctaText: ctaText || null,
+								ctaLink: ctaLink || null,
+							});
 				if (result.success) {
-					toast.success("Promotion created", {
-						description: "Your promotion has been saved.",
-					});
-					router.push("/promotions");
+					toast.success(
+						variant === "announcement" ? "Announcement created" : "Promotion created",
+						{
+							description:
+								variant === "announcement"
+									? "Your announcement has been sent to all gyms."
+									: "Your promotion has been saved.",
+						}
+					);
+					router.push(variant === "announcement" ? "/announcements" : "/promotions");
 					router.refresh();
 				} else {
 					toast.error("Error", {
-						description: "Failed to create promotion.",
+						description:
+							variant === "announcement"
+								? "Failed to create announcement."
+								: "Failed to create promotion.",
 					});
 				}
 			} else if (promotionId) {
-				const result = await updatePromotion(promotionId, {
-					title,
-					description: descriptionPayload,
-					images: imagePayload,
-					ctaText: ctaText || null,
-					ctaLink: ctaLink || null,
-				});
+				const result =
+					variant === "announcement"
+						? await updateAnnouncement(promotionId, {
+								title,
+								description: descriptionPayload,
+								images: imagePayload,
+								ctaText: ctaText || null,
+								ctaLink: ctaLink || null,
+							})
+						: await updatePromotion(promotionId, {
+								title,
+								description: descriptionPayload,
+								images: imagePayload,
+								ctaText: ctaText || null,
+								ctaLink: ctaLink || null,
+							});
 				if (result.success) {
-					toast.success("Promotion updated", {
-						description: "Your changes have been saved.",
-					});
-					router.push("/promotions");
+					toast.success(
+						variant === "announcement" ? "Announcement updated" : "Promotion updated",
+						{
+							description: "Your changes have been saved.",
+						}
+					);
+					router.push(variant === "announcement" ? "/announcements" : "/promotions");
 					router.refresh();
 				} else {
 					toast.error("Error", {
-						description: "Failed to update promotion.",
+						description:
+							variant === "announcement"
+								? "Failed to update announcement."
+								: "Failed to update promotion.",
 					});
 				}
 			}
@@ -111,7 +147,7 @@ export default function PromotionForm({
 		<form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
 			<div className="flex items-center gap-4">
 				<Button type="button" variant="ghost" size="sm" asChild>
-					<Link href="/promotions">
+					<Link href={variant === "announcement" ? "/announcements" : "/promotions"}>
 						<ArrowLeft className="w-4 h-4 mr-2" />
 						Back
 					</Link>
@@ -122,7 +158,7 @@ export default function PromotionForm({
 				<CardHeader>
 					<CardTitle>Title</CardTitle>
 					<CardDescription>
-						Short headline for this promotion
+						Short headline for this {variant === "announcement" ? "announcement" : "promotion"}
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
@@ -152,7 +188,7 @@ export default function PromotionForm({
 				<CardHeader>
 					<CardTitle>Description</CardTitle>
 					<CardDescription>
-						Rich text description for the promotion
+						Rich text description for the {variant === "announcement" ? "announcement" : "promotion"}
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
@@ -206,7 +242,13 @@ export default function PromotionForm({
 					{loading && (
 						<Loader2 className="w-4 h-4 mr-2 animate-spin" />
 					)}
-					{mode === "create" ? "Save promotion" : "Update promotion"}
+					{mode === "create"
+						? variant === "announcement"
+							? "Send announcement"
+							: "Save promotion"
+						: variant === "announcement"
+							? "Update announcement"
+							: "Update promotion"}
 				</Button>
 			</div>
 		</form>

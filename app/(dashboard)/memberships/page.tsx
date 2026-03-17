@@ -1,6 +1,9 @@
-import { getMembershipPlans } from "@/lib/actions/memberships";
+import {
+	getMembershipPlans,
+	getMembershipPlansForGymProfile,
+} from "@/lib/actions/memberships";
 import { auth } from "@/lib/auth";
-import { requireAdmin } from "@/lib/utils/permissions";
+import { requireAdminOrSuperAdmin } from "@/lib/utils/permissions";
 import { redirect } from "next/navigation";
 import {
 	Card,
@@ -14,15 +17,73 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Check } from "lucide-react";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/utils/format";
+import { getGymProfilesPaginated } from "@/lib/actions/gym-profiles";
+import GymProfilesMembershipsTable from "@/components/gym-profiles/GymProfilesMembershipsTable";
 
-export default async function MembershipPlansPage() {
+interface SearchParams {
+	gymProfileId?: string;
+	search?: string;
+	page?: string;
+	limit?: string;
+}
+
+export default async function MembershipPlansPage({
+	searchParams,
+}: {
+	searchParams?: Promise<SearchParams>;
+}) {
 	const session = await auth();
 
-	if (!requireAdmin(session?.user?.role)) {
+	if (!requireAdminOrSuperAdmin(session?.user?.role)) {
 		redirect("/");
 	}
 
-	const plans = await getMembershipPlans();
+	const isSuperAdmin = session?.user?.role === "SUPER_ADMIN";
+
+	const params = await searchParams;
+	const gymProfileId = params?.gymProfileId?.trim() || null;
+	const page = params?.page ? parseInt(params.page, 10) : 1;
+	const limit = params?.limit ? parseInt(params.limit, 10) : 20;
+
+	if (isSuperAdmin && !gymProfileId) {
+		const gyms = await getGymProfilesPaginated({
+			search: params?.search,
+			page: Number.isFinite(page) && page > 0 ? page : 1,
+			limit: Number.isFinite(limit) && limit > 0 ? limit : 20,
+		});
+
+		const serializedGyms = JSON.parse(
+			JSON.stringify(gyms.profiles)
+		) as typeof gyms.profiles;
+
+		return (
+			<div className="space-y-6">
+				<div>
+					<h1 className="text-3xl font-bold tracking-tight">
+						Membership Plans
+					</h1>
+					<p className="text-muted-foreground mt-1">
+						Select a gym profile to view its membership plans
+					</p>
+				</div>
+
+				<Card>
+					<GymProfilesMembershipsTable
+						profiles={serializedGyms}
+						total={gyms.total}
+						currentPage={gyms.currentPage}
+						totalPages={gyms.pages}
+						limit={limit}
+					/>
+				</Card>
+			</div>
+		);
+	}
+
+	const plans =
+		isSuperAdmin && gymProfileId
+			? await getMembershipPlansForGymProfile(gymProfileId)
+			: await getMembershipPlans();
 
 	return (
 		<div className="space-y-6">
@@ -33,15 +94,26 @@ export default async function MembershipPlansPage() {
 						Membership Plans
 					</h1>
 					<p className="text-muted-foreground mt-1">
-						Manage your gym membership plans and pricing
+						{isSuperAdmin && gymProfileId
+							? `View-only (Super Admin) • Gym: ${gymProfileId}`
+							: "Manage your gym membership plans and pricing"}
 					</p>
 				</div>
-				<Button asChild className="bg-gradient-to-r from-blue-600 to-blue-700">
-					<Link href="/memberships/new">
-						<Plus className="w-4 h-4 mr-2" />
-						Add Plan
-					</Link>
-				</Button>
+				{isSuperAdmin && gymProfileId ? (
+					<Button variant="outline" asChild>
+						<Link href="/memberships">Back to gyms</Link>
+					</Button>
+				) : (
+					<Button
+						asChild
+						className="bg-gradient-to-r from-blue-600 to-blue-700"
+					>
+						<Link href="/memberships/new">
+							<Plus className="w-4 h-4 mr-2" />
+							Add Plan
+						</Link>
+					</Button>
+				)}
 			</div>
 
 			{/* Plans Grid */}
@@ -102,11 +174,13 @@ export default async function MembershipPlansPage() {
 								)}
 
 								{/* Actions */}
-								<div className="pt-4 space-y-2">
-									<Button variant="outline" className="w-full" asChild>
-										<Link href={`/memberships/${plan.id}/edit`}>Edit Plan</Link>
-									</Button>
-								</div>
+								{isSuperAdmin && gymProfileId ? null : (
+									<div className="pt-4 space-y-2">
+										<Button variant="outline" className="w-full" asChild>
+											<Link href={`/memberships/${plan.id}/edit`}>Edit Plan</Link>
+										</Button>
+									</div>
+								)}
 							</CardContent>
 						</Card>
 					);

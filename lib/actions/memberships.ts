@@ -5,10 +5,31 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { updateMembershipNotifications } from "./notifications";
 import { createActivityLog } from "@/lib/utils/activityLog";
+import { requireCurrentGymProfileId } from "./gym-profiles";
 
 export async function getMembershipPlans() {
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
 	const plans = await prisma.membershipPlan.findMany({
-		where: { active: true },
+		where: { active: true, gymProfileId },
+		orderBy: { sortOrder: "asc" },
+	});
+
+	return plans.map((plan) => ({
+		...plan,
+		price: Number(plan.price),
+	}));
+}
+
+export async function getMembershipPlansForGymProfile(gymProfileId: string) {
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	if (session.user.role !== "SUPER_ADMIN") throw new Error("Forbidden");
+
+	const plans = await prisma.membershipPlan.findMany({
+		where: { active: true, gymProfileId },
 		orderBy: { sortOrder: "asc" },
 	});
 
@@ -19,8 +40,12 @@ export async function getMembershipPlans() {
 }
 
 export async function getMembershipPlan(id: string) {
-	return await prisma.membershipPlan.findUnique({
-		where: { id },
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
+	return await prisma.membershipPlan.findFirst({
+		where: { id, gymProfileId },
 	});
 }
 
@@ -37,12 +62,14 @@ export async function createMembershipPlan(data: {
 	if (!session || session.user.role !== "ADMIN") {
 		throw new Error("Unauthorized");
 	}
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
 		const _plan = await prisma.membershipPlan.create({
 			data: {
 				...data,
 				features: data.features || [],
+				gymProfileId,
 			},
 		});
 
@@ -70,8 +97,15 @@ export async function updateMembershipPlan(
 	if (!session || session.user.role !== "ADMIN") {
 		throw new Error("Unauthorized");
 	}
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
+		const existing = await prisma.membershipPlan.findFirst({
+			where: { id, gymProfileId },
+			select: { id: true },
+		});
+		if (!existing) return { success: false, error: "Plan not found" };
+
 		const _plan = await prisma.membershipPlan.update({
 			where: { id },
 			data: {
@@ -93,11 +127,12 @@ export async function deleteMembershipPlan(id: string) {
 	if (!session || session.user.role !== "ADMIN") {
 		throw new Error("Unauthorized");
 	}
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
 		// Check if plan has active memberships
 		const activeMemberships = await prisma.membership.count({
-			where: { planId: id, active: true },
+			where: { planId: id, active: true, gymProfileId },
 		});
 
 		if (activeMemberships > 0) {
@@ -108,6 +143,12 @@ export async function deleteMembershipPlan(id: string) {
 		}
 
 		// Soft delete by setting active to false
+		const existingPlan = await prisma.membershipPlan.findFirst({
+			where: { id, gymProfileId },
+			select: { id: true },
+		});
+		if (!existingPlan) return { success: false, error: "Plan not found" };
+
 		await prisma.membershipPlan.update({
 			where: { id },
 			data: { active: false },
@@ -130,12 +171,18 @@ export async function assignMembership(data: {
 }) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
-		const plan = await prisma.membershipPlan.findUnique({
-			where: { id: data.planId },
+		const plan = await prisma.membershipPlan.findFirst({
+			where: { id: data.planId, gymProfileId },
+		});
+		const member = await prisma.member.findFirst({
+			where: { id: data.memberId, gymProfileId },
+			select: { id: true },
 		});
 
+		if (!member) return { success: false, error: "Member not found" };
 		if (!plan) {
 			return { success: false, error: "Plan not found" };
 		}
@@ -156,13 +203,14 @@ export async function assignMembership(data: {
 
 		// Deactivate existing memberships
 		await prisma.membership.updateMany({
-			where: { memberId: data.memberId, active: true },
+			where: { memberId: data.memberId, active: true, gymProfileId },
 			data: { active: false },
 		});
 
 		// Create new membership
 		const membership = await prisma.membership.create({
 			data: {
+				gymProfileId,
 				memberId: data.memberId,
 				planId: data.planId,
 				startDate: data.startDate,
@@ -227,6 +275,7 @@ export async function updateMembership(
 ) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
 		const currentMembership = await prisma.membership.findUnique({
@@ -234,7 +283,7 @@ export async function updateMembership(
 			include: { member: true },
 		});
 
-		if (!currentMembership) {
+		if (!currentMembership || currentMembership.gymProfileId !== gymProfileId) {
 			return { success: false, error: "Membership not found" };
 		}
 
@@ -242,7 +291,7 @@ export async function updateMembership(
 			where: { id: data.planId },
 		});
 
-		if (!plan) {
+		if (!plan || plan.gymProfileId !== gymProfileId) {
 			return { success: false, error: "Plan not found" };
 		}
 
@@ -311,6 +360,7 @@ export async function updateMembership(
 export async function renewMembership(membershipId: string) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
 		const currentMembership = await prisma.membership.findUnique({
@@ -318,7 +368,7 @@ export async function renewMembership(membershipId: string) {
 			include: { plan: true, member: true },
 		});
 
-		if (!currentMembership) {
+		if (!currentMembership || currentMembership.gymProfileId !== gymProfileId) {
 			return { success: false, error: "Membership not found" };
 		}
 
@@ -335,6 +385,7 @@ export async function renewMembership(membershipId: string) {
 		// Create renewed membership
 		const newMembership = await prisma.membership.create({
 			data: {
+				gymProfileId,
 				memberId: currentMembership.memberId,
 				planId: currentMembership.planId,
 				startDate,

@@ -16,7 +16,7 @@ interface Activity {
 	type: "member" | "payment" | "attendance" | "trainer";
 	title: string;
 	description: string;
-	timestamp: Date;
+	timestamp: Date | string;
 	user?: {
 		name: string;
 		avatar?: string;
@@ -83,6 +83,10 @@ export default function RecentActivity({
 				<div className="space-y-4">
 					{activities.map((activity) => {
 						const { icon: Icon, color } = activityIcons[activity.type];
+						const timestamp =
+							typeof activity.timestamp === "string"
+								? new Date(activity.timestamp)
+								: activity.timestamp;
 
 						return (
 							<div key={activity.id} className="flex items-start gap-4">
@@ -97,7 +101,7 @@ export default function RecentActivity({
 										{activity.description}
 									</p>
 									<p className="text-xs text-muted-foreground">
-										{formatDistanceToNow(activity.timestamp, {
+										{formatDistanceToNow(timestamp, {
 											addSuffix: true,
 										})}
 									</p>

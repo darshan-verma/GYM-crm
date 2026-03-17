@@ -6,6 +6,13 @@ import { auth } from "@/lib/auth";
 import { LeadStatus, LeadSource } from "@prisma/client";
 import { updateLeadNotification } from "./notifications";
 import { createActivityLog } from "@/lib/utils/activityLog";
+import { requireCurrentGymProfileId } from "./gym-profiles";
+
+function isSuperAdmin(
+	session: { user?: { role?: string } } | null | undefined
+): boolean {
+	return session?.user?.role === "SUPER_ADMIN";
+}
 
 export async function createLead(data: {
 	name: string;
@@ -18,11 +25,16 @@ export async function createLead(data: {
 }) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	if (isSuperAdmin(session)) {
+		return { success: false, error: "Unauthorized" as const };
+	}
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
 		const lead = await prisma.lead.create({
 			data: {
 				...data,
+				gymProfileId,
 				status: "NEW",
 				assignedTo: session.user.id,
 				lastContactDate: new Date(),
@@ -47,15 +59,27 @@ export async function createLead(data: {
 export async function updateLeadStatus(leadId: string, status: LeadStatus) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	if (isSuperAdmin(session)) {
+		return { success: false, error: "Unauthorized" as const };
+	}
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
-		const lead = await prisma.lead.update({
-			where: { id: leadId },
+		const updated = await prisma.lead.updateMany({
+			where: { id: leadId, gymProfileId },
 			data: {
 				status,
 				...(status === "CONVERTED" && { convertedDate: new Date() }),
 				lastContactDate: new Date(),
 			},
+		});
+
+		if (updated.count === 0) {
+			return { success: false, error: "Lead not found" };
+		}
+
+		const lead = await prisma.lead.findFirst({
+			where: { id: leadId, gymProfileId },
 		});
 
 		await createActivityLog({
@@ -86,14 +110,26 @@ export async function updateLead(
 ) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	if (isSuperAdmin(session)) {
+		return { success: false, error: "Unauthorized" as const };
+	}
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
-		const lead = await prisma.lead.update({
-			where: { id: leadId },
+		const updated = await prisma.lead.updateMany({
+			where: { id: leadId, gymProfileId },
 			data: {
 				...data,
 				lastContactDate: new Date(),
 			},
+		});
+
+		if (updated.count === 0) {
+			return { success: false, error: "Lead not found" };
+		}
+
+		const lead = await prisma.lead.findFirst({
+			where: { id: leadId, gymProfileId },
 		});
 
 		// Update notification if follow-up date changed
@@ -114,7 +150,12 @@ export async function updateLead(
 }
 
 export async function getLeadsByStatus() {
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
 	const leads = await prisma.lead.findMany({
+		where: { gymProfileId },
 		orderBy: { createdAt: "desc" },
 		take: 100,
 	});
@@ -130,9 +171,67 @@ export async function getLeadsByStatus() {
 	return grouped;
 }
 
+export async function getLeadsByStatusForGymPaginated(params: {
+	gymProfileId: string;
+	page: number;
+	limit: number;
+}): Promise<{
+	leadsByStatus: Record<LeadStatus, Awaited<ReturnType<typeof prisma.lead.findMany>>>;
+	statusCounts: Partial<Record<LeadStatus, number>>;
+	total: number;
+	pages: number;
+	currentPage: number;
+}> {
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	if (!isSuperAdmin(session)) throw new Error("Unauthorized");
+
+	const { gymProfileId, page, limit } = params;
+
+	const [leads, total, counts] = await Promise.all([
+		prisma.lead.findMany({
+			where: { gymProfileId },
+			orderBy: { createdAt: "desc" },
+			skip: (page - 1) * limit,
+			take: limit,
+		}),
+		prisma.lead.count({ where: { gymProfileId } }),
+		prisma.lead.groupBy({
+			by: ["status"],
+			where: { gymProfileId },
+			_count: true,
+		}),
+	]);
+
+	const statusCounts: Partial<Record<LeadStatus, number>> = {};
+	for (const row of counts) {
+		statusCounts[row.status] = row._count;
+	}
+
+	const grouped: Record<LeadStatus, typeof leads> = {
+		NEW: leads.filter((l) => l.status === "NEW"),
+		CONTACTED: leads.filter((l) => l.status === "CONTACTED"),
+		FOLLOW_UP: leads.filter((l) => l.status === "FOLLOW_UP"),
+		CONVERTED: leads.filter((l) => l.status === "CONVERTED"),
+		LOST: leads.filter((l) => l.status === "LOST"),
+	};
+
+	return {
+		leadsByStatus: grouped,
+		statusCounts,
+		total,
+		pages: Math.max(1, Math.ceil(total / limit)),
+		currentPage: page,
+	};
+}
+
 export async function getLeadById(id: string) {
-	const lead = await prisma.lead.findUnique({
-		where: { id },
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
+	const lead = await prisma.lead.findFirst({
+		where: { id, gymProfileId },
 	});
 
 	if (!lead) return null;
@@ -144,15 +243,21 @@ export async function getLeadById(id: string) {
 }
 
 export async function getLeadStats() {
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
 	const [total, statusCounts, sourceBreakdown, conversionRate] =
 		await Promise.all([
-			prisma.lead.count(),
+			prisma.lead.count({ where: { gymProfileId } }),
 			prisma.lead.groupBy({
 				by: ["status"],
+				where: { gymProfileId },
 				_count: true,
 			}),
 			prisma.lead.groupBy({
 				by: ["source"],
+				where: { gymProfileId },
 				_count: true,
 			}),
 			prisma.lead.aggregate({
@@ -161,6 +266,46 @@ export async function getLeadStats() {
 				},
 				where: {
 					status: "CONVERTED",
+					gymProfileId,
+				},
+			}),
+		]);
+
+	return {
+		total,
+		converted: conversionRate._count._all,
+		conversionRate:
+			total > 0 ? ((conversionRate._count._all / total) * 100).toFixed(1) : "0",
+		statusCounts,
+		sourceBreakdown,
+	};
+}
+
+export async function getLeadStatsForGymProfile(gymProfileId: string) {
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	if (!isSuperAdmin(session)) throw new Error("Unauthorized");
+
+	const [total, statusCounts, sourceBreakdown, conversionRate] =
+		await Promise.all([
+			prisma.lead.count({ where: { gymProfileId } }),
+			prisma.lead.groupBy({
+				by: ["status"],
+				where: { gymProfileId },
+				_count: true,
+			}),
+			prisma.lead.groupBy({
+				by: ["source"],
+				where: { gymProfileId },
+				_count: true,
+			}),
+			prisma.lead.aggregate({
+				_count: {
+					_all: true,
+				},
+				where: {
+					status: "CONVERTED",
+					gymProfileId,
 				},
 			}),
 		]);
@@ -178,11 +323,16 @@ export async function getLeadStats() {
 export async function deleteLead(id: string) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	if (isSuperAdmin(session)) {
+		return { success: false, error: "Unauthorized" as const };
+	}
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
-		await prisma.lead.delete({
-			where: { id },
+		const deleted = await prisma.lead.deleteMany({
+			where: { id, gymProfileId },
 		});
+		if (deleted.count === 0) return { success: false, error: "Lead not found" };
 
 		revalidatePath("/leads");
 		return { success: true };
@@ -243,6 +393,10 @@ export async function importLeadsFromFile(
 	if (!session) {
 		return { success: false, imported: 0, skipped: 0, errors: ["Unauthorized"] };
 	}
+	if (isSuperAdmin(session)) {
+		return { success: false, imported: 0, skipped: 0, errors: ["Unauthorized"] };
+	}
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	const file = formData.get("file") as File | null;
 	if (!file || file.size === 0) {
@@ -393,6 +547,7 @@ export async function importLeadsFromFile(
 					lastContactDate: lastContactDate ?? new Date(),
 					convertedDate: convertedDate ?? undefined,
 					assignedTo: session.user.id,
+					gymProfileId,
 				},
 			});
 			imported++;

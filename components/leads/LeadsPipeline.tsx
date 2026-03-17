@@ -15,6 +15,8 @@ import ConvertLeadDialog from './ConvertLeadDialog'
 
 interface LeadsPipelineProps {
   leadsByStatus: Record<LeadStatus, Lead[]>
+  statusCounts?: Partial<Record<LeadStatus, number>>
+  readOnly?: boolean
 }
 
 const columns: { status: LeadStatus; title: string; color: string }[] = [
@@ -25,13 +27,18 @@ const columns: { status: LeadStatus; title: string; color: string }[] = [
   { status: 'LOST', title: 'Lost', color: 'bg-red-100 text-red-800 border-red-200' },
 ]
 
-export default function LeadsPipeline({ leadsByStatus }: LeadsPipelineProps) {
+export default function LeadsPipeline({
+  leadsByStatus,
+  statusCounts,
+  readOnly = false,
+}: LeadsPipelineProps) {
   const router = useRouter()
   const [draggedLead, setDraggedLead] = useState<string | null>(null)
   const [convertDialogOpen, setConvertDialogOpen] = useState(false)
   const [leadToConvert, setLeadToConvert] = useState<{ id: string; name: string } | null>(null)
 
   async function handleDrop(status: LeadStatus) {
+    if (readOnly) return
     if (!draggedLead) return
 
     // If dropping to CONVERTED, show confirmation dialog
@@ -67,6 +74,7 @@ export default function LeadsPipeline({ leadsByStatus }: LeadsPipelineProps) {
     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
       {columns.map((column) => {
         const leads = leadsByStatus[column.status] || []
+        const count = statusCounts?.[column.status] ?? leads.length
 
         return (
           <div
@@ -83,7 +91,7 @@ export default function LeadsPipeline({ leadsByStatus }: LeadsPipelineProps) {
                     {column.title}
                   </CardTitle>
                   <Badge variant="secondary" className={column.color}>
-                    {leads.length}
+                    {count}
                   </Badge>
                 </div>
               </CardHeader>
@@ -94,10 +102,10 @@ export default function LeadsPipeline({ leadsByStatus }: LeadsPipelineProps) {
               {leads.map((lead) => (
                 <div
                   key={lead.id}
-                  draggable
-                  onDragStart={() => setDraggedLead(lead.id)}
+                  draggable={!readOnly}
+                  onDragStart={() => !readOnly && setDraggedLead(lead.id)}
                   onDragEnd={() => setDraggedLead(null)}
-                  className="cursor-move"
+                  className={readOnly ? '' : 'cursor-move'}
                 >
                   <Card className="hover:shadow-md transition-all">
                     <CardHeader className="p-4">

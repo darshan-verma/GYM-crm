@@ -1,3 +1,4 @@
+import { auth } from "@/lib/auth";
 import { notFound } from "next/navigation";
 import { getMemberById } from "@/lib/actions/members";
 import {
@@ -43,10 +44,22 @@ const statusColors = {
 
 export default async function MemberDetailPage({
 	params,
+	searchParams,
 }: {
 	params: Promise<{ id: string }>;
+	searchParams?: Promise<{ gymProfileId?: string }>;
 }) {
 	const { id } = await params;
+	const sp = (await searchParams) ?? {};
+	const gymProfileId = sp.gymProfileId?.trim() || null;
+
+	const session = await auth();
+	const isSuperAdmin = session?.user?.role === "SUPER_ADMIN";
+
+	if (isSuperAdmin) {
+		notFound();
+	}
+
 	const member = await getMemberById(id);
 
 	if (!member) {
@@ -116,18 +129,28 @@ export default async function MemberDetailPage({
 					</div>
 				</div>
 				<div className="flex gap-2">
-					<Button variant="outline" asChild>
-						<Link href={`/members/${member.id}/edit`}>
-							<Edit className="w-4 h-4 mr-2" />
-							Edit
-						</Link>
-					</Button>
-					<Button asChild>
-						<Link href={`/billing/payments/new?memberId=${member.id}`}>
-							<CreditCard className="w-4 h-4 mr-2" />
-							Record Payment
-						</Link>
-					</Button>
+					{isSuperAdmin ? (
+						<Button variant="outline" asChild>
+							<Link href={gymProfileId ? `/members?gymProfileId=${encodeURIComponent(gymProfileId)}` : "/members"}>
+								Back
+							</Link>
+						</Button>
+					) : (
+						<>
+							<Button variant="outline" asChild>
+								<Link href={`/members/${member.id}/edit`}>
+									<Edit className="w-4 h-4 mr-2" />
+									Edit
+								</Link>
+							</Button>
+							<Button asChild>
+								<Link href={`/billing/payments/new?memberId=${member.id}`}>
+									<CreditCard className="w-4 h-4 mr-2" />
+									Record Payment
+								</Link>
+							</Button>
+						</>
+					)}
 				</div>
 			</div>
 

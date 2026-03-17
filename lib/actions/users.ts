@@ -5,6 +5,8 @@ import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 import { Permission } from "@prisma/client";
+import { requireCurrentGymProfileId } from "./gym-profiles";
+import { createActivityLog } from "@/lib/utils/activityLog";
 
 export async function getUsers() {
 	const session = await auth();
@@ -14,8 +16,32 @@ export async function getUsers() {
 	) {
 		throw new Error("Unauthorized");
 	}
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	return await prisma.user.findMany({
+		where: { gymProfileId },
+		orderBy: { createdAt: "desc" },
+		select: {
+			id: true,
+			name: true,
+			email: true,
+			role: true,
+			customRoleId: true,
+			customRole: { select: { id: true, name: true } },
+			permissions: true,
+			phone: true,
+			createdAt: true,
+		},
+	});
+}
+
+export async function getUsersForGymProfile(gymProfileId: string) {
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	if (session.user.role !== "SUPER_ADMIN") throw new Error("Forbidden");
+
+	return await prisma.user.findMany({
+		where: { gymProfileId },
 		orderBy: { createdAt: "desc" },
 		select: {
 			id: true,
@@ -39,9 +65,10 @@ export async function getUser(id: string) {
 	) {
 		throw new Error("Unauthorized");
 	}
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
-	return await prisma.user.findUnique({
-		where: { id },
+	return await prisma.user.findFirst({
+		where: { id, gymProfileId },
 		select: {
 			id: true,
 			name: true,
@@ -69,6 +96,7 @@ export async function createUser(data: {
 	if (!session) {
 		throw new Error("Unauthorized");
 	}
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	// Only super admins can create admin or super admin accounts
 	if (
@@ -108,18 +136,17 @@ export async function createUser(data: {
 				customRoleId: data.role === "CUSTOM" ? data.customRoleId ?? null : null,
 				phone: data.phone,
 				permissions: data.permissions || [],
+				gymProfileId,
 			},
 		});
 
 		// Log activity
-		await prisma.activityLog.create({
-			data: {
-				userId: session.user.id,
-				action: "CREATE_USER",
-				entity: "USER",
-				entityId: user.id,
-				details: `Created user: ${user.name} (${user.email})`,
-			},
+		await createActivityLog({
+			userId: session.user.id,
+			action: "CREATE_USER",
+			entity: "USER",
+			entityId: user.id,
+			details: `Created user: ${user.name} (${user.email})`,
 		});
 
 		revalidatePath("/staff");
@@ -148,6 +175,7 @@ export async function updateUser(
 	) {
 		throw new Error("Unauthorized");
 	}
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	// Only super admins can change roles to admin or super admin
 	if (
@@ -166,6 +194,14 @@ export async function updateUser(
 	}
 
 	try {
+		const existing = await prisma.user.findFirst({
+			where: { id, gymProfileId },
+			select: { id: true },
+		});
+		if (!existing) {
+			return { success: false, error: "User not found" };
+		}
+
 		// Check if email is taken by another user
 		if (data.email) {
 			const existingUser = await prisma.user.findUnique({
@@ -197,14 +233,12 @@ export async function updateUser(
 		});
 
 		// Log activity
-		await prisma.activityLog.create({
-			data: {
-				userId: session.user.id,
-				action: "UPDATE_USER",
-				entity: "USER",
-				entityId: user.id,
-				details: `Updated user: ${user.name}`,
-			},
+		await createActivityLog({
+			userId: session.user.id,
+			action: "UPDATE_USER",
+			entity: "USER",
+			entityId: user.id,
+			details: `Updated user: ${user.name}`,
 		});
 
 		revalidatePath("/staff");
@@ -223,6 +257,7 @@ export async function deleteUser(id: string) {
 	) {
 		throw new Error("Unauthorized");
 	}
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	// Prevent deleting yourself
 	if (session.user.id === id) {
@@ -234,7 +269,7 @@ export async function deleteUser(id: string) {
 		where: { id },
 	});
 
-	if (!userToDelete) {
+	if (!userToDelete || userToDelete.gymProfileId !== gymProfileId) {
 		return { success: false, error: "User not found" };
 	}
 
@@ -260,14 +295,12 @@ export async function deleteUser(id: string) {
 		});
 
 		// Log activity
-		await prisma.activityLog.create({
-			data: {
-				userId: session.user.id,
-				action: "DELETE_USER",
-				entity: "USER",
-				entityId: id,
-				details: `Deleted user: ${user.name} (${user.email})`,
-			},
+		await createActivityLog({
+			userId: session.user.id,
+			action: "DELETE_USER",
+			entity: "USER",
+			entityId: id,
+			details: `Deleted user: ${user.name} (${user.email})`,
 		});
 
 		revalidatePath("/staff");

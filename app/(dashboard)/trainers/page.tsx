@@ -1,6 +1,6 @@
-import { getTrainers } from "@/lib/actions/trainers";
+import { getTrainers, getTrainersForGymProfile } from "@/lib/actions/trainers";
 import { auth } from "@/lib/auth";
-import { requireAdmin } from "@/lib/utils/permissions";
+import { requireAdminOrSuperAdmin } from "@/lib/utils/permissions";
 import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -9,15 +9,71 @@ import { Button } from "@/components/ui/button";
 import { Plus, Users, Phone, Mail } from "lucide-react";
 import Link from "next/link";
 import { formatPhoneNumber } from "@/lib/utils/format";
+import { getGymProfilesPaginated } from "@/lib/actions/gym-profiles";
+import GymProfilesTrainersTable from "@/components/gym-profiles/GymProfilesTrainersTable";
 
-export default async function TrainersPage() {
+interface SearchParams {
+	gymProfileId?: string;
+	search?: string;
+	page?: string;
+	limit?: string;
+}
+
+export default async function TrainersPage({
+	searchParams,
+}: {
+	searchParams?: Promise<SearchParams>;
+}) {
 	const session = await auth();
 
-	if (!requireAdmin(session?.user?.role)) {
+	if (!requireAdminOrSuperAdmin(session?.user?.role)) {
 		redirect("/");
 	}
 
-	const trainers = await getTrainers();
+	const isSuperAdmin = session?.user?.role === "SUPER_ADMIN";
+
+	const params = await searchParams;
+	const gymProfileId = params?.gymProfileId?.trim() || null;
+	const page = params?.page ? parseInt(params.page, 10) : 1;
+	const limit = params?.limit ? parseInt(params.limit, 10) : 20;
+
+	if (isSuperAdmin && !gymProfileId) {
+		const gyms = await getGymProfilesPaginated({
+			search: params?.search,
+			page: Number.isFinite(page) && page > 0 ? page : 1,
+			limit: Number.isFinite(limit) && limit > 0 ? limit : 20,
+		});
+
+		const serializedGyms = JSON.parse(
+			JSON.stringify(gyms.profiles)
+		) as typeof gyms.profiles;
+
+		return (
+			<div className="space-y-6">
+				<div>
+					<h1 className="text-3xl font-bold tracking-tight">Trainers</h1>
+					<p className="text-muted-foreground mt-1">
+						Select a gym profile to view its trainers
+					</p>
+				</div>
+
+				<Card>
+					<GymProfilesTrainersTable
+						profiles={serializedGyms}
+						total={gyms.total}
+						currentPage={gyms.currentPage}
+						totalPages={gyms.pages}
+						limit={limit}
+					/>
+				</Card>
+			</div>
+		);
+	}
+
+	const trainers =
+		isSuperAdmin && gymProfileId
+			? await getTrainersForGymProfile(gymProfileId)
+			: await getTrainers();
 
 	return (
 		<div className="space-y-6">
@@ -26,15 +82,26 @@ export default async function TrainersPage() {
 				<div>
 					<h1 className="text-3xl font-bold tracking-tight">Trainers</h1>
 					<p className="text-muted-foreground mt-1">
-						Manage your gym trainers and their assigned members
+						{isSuperAdmin && gymProfileId
+							? `View-only (Super Admin) • Gym: ${gymProfileId}`
+							: "Manage your gym trainers and their assigned members"}
 					</p>
 				</div>
-				<Button asChild className="bg-gradient-to-r from-blue-600 to-blue-700">
-					<Link href="/trainers/new">
-						<Plus className="w-4 h-4 mr-2" />
-						Add Trainer
-					</Link>
-				</Button>
+				{isSuperAdmin && gymProfileId ? (
+					<Button variant="outline" asChild>
+						<Link href="/trainers">Back to gyms</Link>
+					</Button>
+				) : (
+					<Button
+						asChild
+						className="bg-gradient-to-r from-blue-600 to-blue-700"
+					>
+						<Link href="/trainers/new">
+							<Plus className="w-4 h-4 mr-2" />
+							Add Trainer
+						</Link>
+					</Button>
+				)}
 			</div>
 
 			{/* Stats */}
@@ -142,9 +209,11 @@ export default async function TrainersPage() {
 							</div>
 
 							{/* Actions */}
-							<Button variant="outline" className="w-full" asChild>
-								<Link href={`/trainers/${trainer.id}`}>View Profile</Link>
-							</Button>
+							{isSuperAdmin && gymProfileId ? null : (
+								<Button variant="outline" className="w-full" asChild>
+									<Link href={`/trainers/${trainer.id}`}>View Profile</Link>
+								</Button>
+							)}
 						</CardContent>
 					</Card>
 				))}

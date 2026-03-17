@@ -1,3 +1,5 @@
+import { auth } from "@/lib/auth";
+import { notFound } from "next/navigation";
 import { getTrainers } from "@/lib/actions/members";
 import { getMembershipPlans } from "@/lib/actions/memberships";
 import { getLeadById } from "@/lib/actions/leads";
@@ -18,6 +20,11 @@ export default async function NewMemberPage({
 }: {
 	searchParams: Promise<{ leadId?: string }>;
 }) {
+	const session = await auth();
+	if (session?.user?.role === "SUPER_ADMIN") {
+		notFound();
+	}
+
 	const params = await searchParams;
 	const leadId = params?.leadId;
 

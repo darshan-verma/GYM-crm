@@ -28,7 +28,7 @@ export default auth((req) => {
 
   // Admin-only routes
   if (path.startsWith('/settings') || path.startsWith('/staff')) {
-    if (userRole !== 'ADMIN') {
+    if (userRole !== 'ADMIN' && userRole !== 'SUPER_ADMIN') {
       return NextResponse.redirect(new URL('/', req.url))
     }
   }

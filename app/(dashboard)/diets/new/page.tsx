@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { requireCurrentGymProfileId } from "@/lib/actions/gym-profiles";
 import prisma from "@/lib/db/prisma";
 import DietForm from "@/components/forms/DietForm";
 import { getDietTypes } from "@/lib/actions/diet-types";
@@ -10,9 +11,11 @@ export default async function NewDietPage() {
 	if (!session) {
 		redirect("/login");
 	}
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	const [members, dietTypes, foods, foodCategories] = await Promise.all([
 		prisma.member.findMany({
+			where: { gymProfileId },
 			select: {
 				id: true,
 				name: true,

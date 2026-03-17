@@ -17,6 +17,8 @@ export type GymProfileFormData = {
 	watermarkUrl?: string | null;
 	adminUsername?: string;
 	adminPassword?: string;
+	/** When editing: admin login email (optional update) */
+	adminEmail?: string;
 };
 
 export async function getGymProfiles(): Promise<GymProfile[]> {
@@ -24,6 +26,53 @@ export async function getGymProfiles(): Promise<GymProfile[]> {
 		orderBy: { name: "asc" },
 	});
 	return profiles;
+}
+
+export async function getGymProfilesPaginated(params?: {
+	search?: string;
+	page?: number;
+	limit?: number;
+}): Promise<{
+	profiles: GymProfile[];
+	total: number;
+	pages: number;
+	currentPage: number;
+}> {
+	const { search, page = 1, limit = 20 } = params || {};
+
+	const where: {
+		OR?: Array<
+			| { name: { contains: string; mode: "insensitive" } }
+			| { email: { contains: string; mode: "insensitive" } }
+			| { phone: { contains: string } }
+		>;
+	} = {};
+
+	if (search?.trim()) {
+		const q = search.trim();
+		where.OR = [
+			{ name: { contains: q, mode: "insensitive" } },
+			{ email: { contains: q, mode: "insensitive" } },
+			{ phone: { contains: q } },
+		];
+	}
+
+	const [profiles, total] = await Promise.all([
+		prisma.gymProfile.findMany({
+			where,
+			orderBy: { name: "asc" },
+			skip: (page - 1) * limit,
+			take: limit,
+		}),
+		prisma.gymProfile.count({ where }),
+	]);
+
+	return {
+		profiles,
+		total,
+		pages: Math.max(1, Math.ceil(total / limit)),
+		currentPage: page,
+	};
 }
 
 export async function getActiveGymProfile(): Promise<GymProfile | null> {
@@ -45,6 +94,18 @@ export async function getActiveGymProfileId(): Promise<string | null> {
 	});
 	if (!setting || typeof setting.value !== "string") return null;
 	return setting.value;
+}
+
+/** Returns the first ADMIN user for a gym profile (for pre-filling edit form). */
+export async function getGymProfileAdminUser(profileId: string): Promise<{
+	email: string;
+	username: string | null;
+} | null> {
+	const user = await prisma.user.findFirst({
+		where: { gymProfileId: profileId, role: "ADMIN" },
+		select: { email: true, username: true },
+	});
+	return user ? { email: user.email, username: user.username } : null;
 }
 
 // Resolve the "current" gym profile for a request based on the session.
@@ -85,6 +146,16 @@ export async function getCurrentGymProfile(
 	}
 
 	return null;
+}
+
+export async function requireCurrentGymProfileId(
+	session: Session | null
+): Promise<string> {
+	const gym = await getCurrentGymProfile(session);
+	if (!gym?.id) {
+		throw new Error("No gym profile selected for this user");
+	}
+	return gym.id;
 }
 
 export async function createGymProfile(data: GymProfileFormData) {
@@ -142,6 +213,33 @@ export async function updateGymProfile(id: string, data: GymProfileFormData) {
 			watermarkUrl: data.watermarkUrl !== undefined ? (data.watermarkUrl?.trim() || null) : undefined,
 		},
 	});
+
+	const updateAdminCredentials =
+		(data.adminEmail !== undefined && data.adminEmail.trim() !== "") ||
+		data.adminUsername !== undefined ||
+		(data.adminPassword !== undefined && data.adminPassword.trim() !== "");
+
+	if (updateAdminCredentials) {
+		const adminUser = await prisma.user.findFirst({
+			where: { gymProfileId: id, role: "ADMIN" },
+		});
+		if (adminUser) {
+			const updateData: { email?: string; username?: string | null; password?: string } = {};
+			if (data.adminEmail?.trim()) updateData.email = data.adminEmail.trim();
+			if (data.adminUsername !== undefined) updateData.username = data.adminUsername.trim() || null;
+			if (data.adminPassword?.trim()) {
+				const bcrypt = await import("bcryptjs");
+				updateData.password = await bcrypt.hash(data.adminPassword.trim(), 10);
+			}
+			if (Object.keys(updateData).length > 0) {
+				await prisma.user.update({
+					where: { id: adminUser.id },
+					data: updateData,
+				});
+			}
+		}
+	}
+
 	revalidatePath("/settings");
 	revalidatePath("/");
 	revalidatePath("/billing/invoices");

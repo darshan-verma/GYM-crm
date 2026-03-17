@@ -4,17 +4,23 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import PaymentForm from "@/components/forms/PaymentForm";
 import prisma from "@/lib/db/prisma";
+import { auth } from "@/lib/auth";
+import { requireCurrentGymProfileId } from "@/lib/actions/gym-profiles";
 
 export default async function NewPaymentPage({
 	searchParams,
 }: {
 	searchParams?: Promise<{ memberId?: string }>;
 }) {
+	const session = await auth();
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
 	// Await searchParams as it's a Promise in Next.js
 	const params = await searchParams;
 	
 	// Get members with all their memberships and payments for payment form
 	const members = await prisma.member.findMany({
+		where: { gymProfileId },
 		include: {
 			memberships: {
 				include: { plan: true },

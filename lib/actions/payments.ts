@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { PaymentMode } from "@prisma/client";
 import { createActivityLog } from "@/lib/utils/activityLog";
+import { requireCurrentGymProfileId } from "./gym-profiles";
+import type { Session } from "next-auth";
 
 export async function createPayment(data: {
 	memberId: string;
@@ -20,6 +22,7 @@ export async function createPayment(data: {
 }) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
 		// Handle membershipId - treat "none" as no selection
@@ -28,8 +31,8 @@ export async function createPayment(data: {
 				? data.membershipId
 				: undefined;
 			// Get member details with payments
-		const member = await prisma.member.findUnique({
-			where: { id: data.memberId },
+		const member = await prisma.member.findFirst({
+			where: { id: data.memberId, gymProfileId },
 			include: {
 				memberships: {
 					where: { active: true },
@@ -105,6 +108,7 @@ export async function createPayment(data: {
 
 		const lastPayment = await prisma.payment.findFirst({
 			where: {
+				gymProfileId,
 				invoiceNumber: {
 					startsWith: `INV${year}${month}`,
 				},
@@ -124,6 +128,7 @@ export async function createPayment(data: {
 		// Generate transaction ID
 		const lastTxnPayment = await prisma.payment.findFirst({
 			where: {
+				gymProfileId,
 				transactionId: {
 					startsWith: `TXN${year}${month}`,
 				},
@@ -163,6 +168,7 @@ export async function createPayment(data: {
 		// Store final payable (taxable + GST) as the payment amount
 		const payment = await prisma.payment.create({
 			data: {
+				gymProfileId,
 				memberId: data.memberId,
 				amount: finalPayable, // Final Payable = Taxable + GST
 				paymentMode: data.paymentMode,
@@ -186,8 +192,8 @@ export async function createPayment(data: {
 
 		// Update membership if this is a renewal
 		if (membershipId) {
-			const membership = await prisma.membership.findUnique({
-				where: { id: membershipId },
+			const membership = await prisma.membership.findFirst({
+				where: { id: membershipId, gymProfileId },
 				include: { plan: true },
 			});
 
@@ -240,8 +246,12 @@ export async function createPayment(data: {
 }
 
 export async function getPayment(id: string) {
-	return await prisma.payment.findUnique({
-		where: { id },
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
+	return await prisma.payment.findFirst({
+		where: { id, gymProfileId },
 		include: {
 			member: {
 				include: {
@@ -264,6 +274,10 @@ export async function getPayments(params?: {
 	page?: number;
 	limit?: number;
 }) {
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
 	const {
 		memberId,
 		startDate,
@@ -274,7 +288,7 @@ export async function getPayments(params?: {
 		limit = 50,
 	} = params || {};
 
-	const where: Record<string, unknown> = {};
+	const where: Record<string, unknown> = { gymProfileId };
 
 	if (memberId) {
 		where.memberId = memberId;
@@ -338,6 +352,10 @@ export async function getPayments(params?: {
 export async function getPaymentStats(
 	period: "today" | "week" | "month" | "year" = "month"
 ) {
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
 	const now = new Date();
 	let startDate: Date;
 
@@ -359,6 +377,7 @@ export async function getPaymentStats(
 	const [totalRevenue, paymentsByMode, recentPayments] = await Promise.all([
 		prisma.payment.aggregate({
 			where: {
+				gymProfileId,
 				paymentDate: { gte: startDate },
 			},
 			_sum: { amount: true },
@@ -367,6 +386,7 @@ export async function getPaymentStats(
 		prisma.payment.groupBy({
 			by: ["paymentMode"],
 			where: {
+				gymProfileId,
 				paymentDate: { gte: startDate },
 			},
 			_sum: { amount: true },
@@ -374,6 +394,159 @@ export async function getPaymentStats(
 		}),
 		prisma.payment.findMany({
 			where: {
+				gymProfileId,
+				paymentDate: { gte: startDate },
+			},
+			include: {
+				member: { select: { name: true, membershipNumber: true } },
+			},
+			orderBy: { paymentDate: "desc" },
+			take: 10,
+		}),
+	]);
+
+	return {
+		totalRevenue: Number(totalRevenue._sum.amount || 0),
+		totalTransactions: totalRevenue._count,
+		averageTransaction:
+			totalRevenue._count > 0
+				? Number(totalRevenue._sum.amount || 0) / totalRevenue._count
+				: 0,
+		paymentsByMode,
+		recentPayments,
+	};
+}
+
+function assertSuperAdmin(session: Session | null) {
+	if (!session) throw new Error("Unauthorized");
+	if (session.user.role !== "SUPER_ADMIN") throw new Error("Forbidden");
+}
+
+export async function getPaymentsForGymProfile(params: {
+	gymProfileId: string;
+	memberId?: string;
+	startDate?: string;
+	endDate?: string;
+	mode?: PaymentMode;
+	search?: string;
+	page?: number;
+	limit?: number;
+}) {
+	const session = await auth();
+	assertSuperAdmin(session);
+
+	const {
+		gymProfileId,
+		memberId,
+		startDate,
+		endDate,
+		mode,
+		search,
+		page = 1,
+		limit = 50,
+	} = params;
+
+	const where: Record<string, unknown> = { gymProfileId };
+
+	if (memberId) where.memberId = memberId;
+	if (mode) where.paymentMode = mode;
+
+	if (startDate && endDate) {
+		where.paymentDate = {
+			gte: new Date(startDate),
+			lte: new Date(endDate),
+		};
+	}
+
+	if (search) {
+		where.OR = [
+			{ invoiceNumber: { contains: search, mode: "insensitive" } },
+			{ transactionId: { contains: search, mode: "insensitive" } },
+			{ member: { name: { contains: search, mode: "insensitive" } } },
+			{ member: { phone: { contains: search } } },
+		];
+	}
+
+	const [payments, total] = await Promise.all([
+		prisma.payment.findMany({
+			where,
+			include: {
+				member: {
+					select: {
+						id: true,
+						name: true,
+						membershipNumber: true,
+						phone: true,
+					},
+				},
+			},
+			orderBy: { paymentDate: "desc" },
+			skip: (page - 1) * limit,
+			take: limit,
+		}),
+		prisma.payment.count({ where }),
+	]);
+
+	const totalAmount = await prisma.payment.aggregate({
+		where,
+		_sum: { amount: true },
+	});
+
+	return {
+		payments,
+		total,
+		totalAmount: Number(totalAmount._sum.amount || 0),
+		pages: Math.ceil(total / limit),
+		currentPage: page,
+	};
+}
+
+export async function getPaymentStatsForGymProfile(
+	gymProfileId: string,
+	period: "today" | "week" | "month" | "year" = "month"
+) {
+	const session = await auth();
+	assertSuperAdmin(session);
+
+	const now = new Date();
+	let startDate: Date;
+
+	switch (period) {
+		case "today":
+			startDate = new Date(now.setHours(0, 0, 0, 0));
+			break;
+		case "week":
+			startDate = new Date(now.setDate(now.getDate() - 7));
+			break;
+		case "month":
+			startDate = new Date(now.setMonth(now.getMonth() - 1));
+			break;
+		case "year":
+			startDate = new Date(now.setFullYear(now.getFullYear() - 1));
+			break;
+	}
+
+	const [totalRevenue, paymentsByMode, recentPayments] = await Promise.all([
+		prisma.payment.aggregate({
+			where: {
+				gymProfileId,
+				paymentDate: { gte: startDate },
+			},
+			_sum: { amount: true },
+			_count: true,
+		}),
+		prisma.payment.groupBy({
+			by: ["paymentMode"],
+			where: {
+				gymProfileId,
+				paymentDate: { gte: startDate },
+			},
+			_sum: { amount: true },
+			_count: true,
+		}),
+		prisma.payment.findMany({
+			where: {
+				gymProfileId,
 				paymentDate: { gte: startDate },
 			},
 			include: {

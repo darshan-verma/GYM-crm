@@ -5,6 +5,8 @@ import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { createActivityLog } from "@/lib/utils/activityLog";
+import { requireCurrentGymProfileId } from "./gym-profiles";
+import type { Session } from "next-auth";
 
 interface Exercise {
 	name: string;
@@ -15,11 +17,57 @@ interface Exercise {
 	notes: string;
 }
 
+function assertSuperAdmin(session: Session | null) {
+	if (!session) throw new Error("Unauthorized");
+	if (session.user.role !== "SUPER_ADMIN") throw new Error("Forbidden");
+}
+
 export async function getWorkoutPlans(memberId?: string) {
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
 	const where: Record<string, unknown> = {};
 
 	if (memberId) {
 		where.memberId = memberId;
+	}
+	where.gymProfileId = gymProfileId;
+
+	return await prisma.workoutPlan.findMany({
+		where,
+		include: {
+			member: {
+				select: {
+					id: true,
+					name: true,
+					membershipNumber: true,
+				},
+			},
+			goal: {
+				select: {
+					id: true,
+					name: true,
+				},
+			},
+		},
+		orderBy: { createdAt: "desc" },
+	});
+}
+
+export async function getWorkoutPlansForGymProfile(params: {
+	gymProfileId: string;
+	memberId?: string;
+}) {
+	const session = await auth();
+	assertSuperAdmin(session);
+
+	const where: Record<string, unknown> = {
+		gymProfileId: params.gymProfileId,
+	};
+
+	if (params.memberId) {
+		where.memberId = params.memberId;
 	}
 
 	return await prisma.workoutPlan.findMany({
@@ -44,8 +92,12 @@ export async function getWorkoutPlans(memberId?: string) {
 }
 
 export async function getWorkoutPlan(id: string) {
-	return await prisma.workoutPlan.findUnique({
-		where: { id },
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
+	return await prisma.workoutPlan.findFirst({
+		where: { id, gymProfileId },
 		include: {
 			member: {
 				select: {
@@ -78,11 +130,19 @@ export async function createWorkoutPlan(data: {
 }) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
+		const member = await prisma.member.findUnique({
+			where: { id: data.memberId, gymProfileId },
+			select: { id: true },
+		});
+		if (!member) return { success: false, error: "Member not found" };
+
 		const workoutPlan = await prisma.workoutPlan.create({
 			data: {
 				...data,
+				gymProfileId,
 				exercises: data.exercises as unknown as Prisma.InputJsonValue,
 			},
 		});
@@ -123,8 +183,15 @@ export async function updateWorkoutPlan(
 ) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
+		const existing = await prisma.workoutPlan.findFirst({
+			where: { id, gymProfileId },
+			select: { id: true },
+		});
+		if (!existing) return { success: false, error: "Workout plan not found" };
+
 		const updateData: Record<string, unknown> = {
 			name: data.name,
 			description: data.description,
@@ -171,8 +238,15 @@ export async function updateWorkoutPlan(
 export async function deleteWorkoutPlan(id: string) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
+		const existing = await prisma.workoutPlan.findFirst({
+			where: { id, gymProfileId },
+			select: { id: true },
+		});
+		if (!existing) return { success: false, error: "Workout plan not found" };
+
 		const plan = await prisma.workoutPlan.delete({
 			where: { id },
 		});

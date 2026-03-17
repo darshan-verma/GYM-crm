@@ -7,10 +7,18 @@ import { auth } from "@/lib/auth";
 import { MembershipStatus } from "@prisma/client";
 import { createNewMemberNotification } from "./notifications";
 import { createActivityLog } from "@/lib/utils/activityLog";
+import { requireCurrentGymProfileId } from "./gym-profiles";
+
+function isSuperAdmin(
+	session: { user?: { role?: string } } | null | undefined
+): boolean {
+	return session?.user?.role === "SUPER_ADMIN";
+}
 
 export async function createMember(formData: FormData) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
 		const latitudeStr = formData.get("latitude") as string;
@@ -74,6 +82,24 @@ export async function createMember(formData: FormData) {
 			};
 		}
 
+		if (membershipPlan.gymProfileId !== gymProfileId) {
+			return {
+				success: false,
+				error: "Selected membership plan does not belong to your gym",
+			};
+		}
+
+		// If a trainer is selected, ensure it belongs to the same gym
+		if (data.trainerId) {
+			const trainer = await prisma.user.findFirst({
+				where: { id: data.trainerId, role: "TRAINER", gymProfileId, active: true },
+				select: { id: true },
+			});
+			if (!trainer) {
+				return { success: false, error: "Selected trainer is not available in your gym" };
+			}
+		}
+
 		// Handle photo upload using Vercel Blob Storage
 		let photoPath = null;
 		const photo = formData.get("photo") as File;
@@ -95,6 +121,7 @@ export async function createMember(formData: FormData) {
 
 		// Generate membership number
 		const lastMember = await prisma.member.findFirst({
+			where: { gymProfileId },
 			orderBy: { createdAt: "desc" },
 			select: { membershipNumber: true },
 		});
@@ -108,6 +135,7 @@ export async function createMember(formData: FormData) {
 		const member = await prisma.member.create({
 			data: {
 				...data,
+				gymProfileId,
 				membershipNumber,
 				photo: photoPath,
 				dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
@@ -133,6 +161,7 @@ export async function createMember(formData: FormData) {
 				finalAmount: membershipPlan.price,
 				active: true,
 				autoRenew: false,
+				gymProfileId,
 			},
 		});
 
@@ -178,8 +207,85 @@ export async function getMembers(params?: {
 	limit?: number;
 }) {
 	const { search, status, trainerId, page = 1, limit = 20 } = params || {};
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
-	const where: Record<string, unknown> = {};
+	const where: Record<string, unknown> = { gymProfileId };
+
+	if (search) {
+		where.OR = [
+			{ name: { contains: search, mode: "insensitive" } },
+			{ phone: { contains: search } },
+			{ membershipNumber: { contains: search, mode: "insensitive" } },
+			{ email: { contains: search, mode: "insensitive" } },
+		];
+	}
+
+	if (status) {
+		where.status = status;
+	}
+
+	if (trainerId) {
+		where.trainerId = trainerId;
+	}
+
+	const [members, total] = await Promise.all([
+		prisma.member.findMany({
+			where,
+			select: {
+				id: true,
+				name: true,
+				membershipNumber: true,
+				phone: true,
+				email: true,
+				photo: true,
+				status: true,
+				trainer: { select: { id: true, name: true } },
+				memberships: {
+					where: { active: true },
+					include: { plan: true },
+					orderBy: { endDate: "desc" },
+					take: 1,
+				},
+				_count: {
+					select: {
+						payments: true,
+						attendance: true,
+					},
+				},
+			},
+			orderBy: { createdAt: "desc" },
+			skip: (page - 1) * limit,
+			take: limit,
+		}),
+		prisma.member.count({ where }),
+	]);
+
+	return {
+		members,
+		total,
+		pages: Math.ceil(total / limit),
+		currentPage: page,
+	};
+}
+
+export async function getMembersForGymProfile(params: {
+	gymProfileId: string;
+	search?: string;
+	status?: MembershipStatus;
+	trainerId?: string;
+	page?: number;
+	limit?: number;
+}) {
+	const { gymProfileId, search, status, trainerId, page = 1, limit = 20 } =
+		params;
+
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	if (!isSuperAdmin(session)) throw new Error("Unauthorized");
+
+	const where: Record<string, unknown> = { gymProfileId };
 
 	if (search) {
 		where.OR = [
@@ -239,8 +345,76 @@ export async function getMembers(params?: {
 }
 
 export async function getMemberById(id: string) {
-	const member = await prisma.member.findUnique({
-		where: { id },
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
+	const member = await prisma.member.findFirst({
+		where: { id, gymProfileId },
+		include: {
+			trainer: true,
+			memberships: {
+				include: { plan: true },
+				orderBy: { createdAt: "desc" },
+			},
+			payments: {
+				orderBy: { paymentDate: "desc" },
+				take: 20,
+			},
+			attendance: {
+				orderBy: { date: "desc" },
+				take: 30,
+			},
+			workoutPlans: {
+				where: { active: true },
+				orderBy: { createdAt: "desc" },
+			},
+			dietPlans: {
+				where: { active: true },
+				orderBy: { createdAt: "desc" },
+			},
+		},
+	});
+
+	if (!member) return null;
+
+	// Serialize Decimal objects to numbers for client components
+	return {
+		...member,
+		latitude: member.latitude ? Number(member.latitude) : null,
+		longitude: member.longitude ? Number(member.longitude) : null,
+		memberships: member.memberships.map((membership) => ({
+			...membership,
+			amount: Number(membership.amount),
+			discount: membership.discount ? Number(membership.discount) : null,
+			finalAmount: Number(membership.finalAmount),
+			plan: membership.plan
+				? {
+						...membership.plan,
+						price: Number(membership.plan.price),
+					}
+				: null,
+		})),
+		payments: member.payments.map((payment) => ({
+			...payment,
+			amount: Number(payment.amount),
+			gstPercentage: payment.gstPercentage ? Number(payment.gstPercentage) : null,
+			gstAmount: payment.gstAmount ? Number(payment.gstAmount) : null,
+			discount: payment.discount ? Number(payment.discount) : null,
+		})),
+	};
+}
+
+export async function getMemberByIdForGymProfile(
+	id: string,
+	gymProfileId: string
+) {
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	if (!isSuperAdmin(session)) throw new Error("Unauthorized");
+
+	const member = await prisma.member.findFirst({
+		where: { id, gymProfileId },
 		include: {
 			trainer: true,
 			memberships: {
@@ -298,8 +472,17 @@ export async function getMemberById(id: string) {
 export async function updateMember(id: string, formData: FormData) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
+		const existingMember = await prisma.member.findFirst({
+			where: { id, gymProfileId },
+			select: { id: true },
+		});
+		if (!existingMember) {
+			return { success: false, error: "Member not found" };
+		}
+
 		const latitudeStr = formData.get("latitude") as string;
 		const longitudeStr = formData.get("longitude") as string;
 		const formattedAddress = (formData.get("formattedAddress") as string) || null;
@@ -341,7 +524,7 @@ export async function updateMember(id: string, formData: FormData) {
 
 		// Get current active membership
 		const currentMembership = await prisma.membership.findFirst({
-			where: { memberId: id, active: true },
+			where: { memberId: id, active: true, gymProfileId },
 		});
 
 		// Handle membership plan changes
@@ -350,6 +533,10 @@ export async function updateMember(id: string, formData: FormData) {
 			const membershipPlan = await prisma.membershipPlan.findUnique({
 				where: { id: membershipPlanId },
 			});
+
+			if (membershipPlan && membershipPlan.gymProfileId !== gymProfileId) {
+				return { success: false, error: "Selected membership plan does not belong to your gym" };
+			}
 
 			if (membershipPlan) {
 				// Deactivate current membership if exists
@@ -375,6 +562,7 @@ export async function updateMember(id: string, formData: FormData) {
 						finalAmount: membershipPlan.price,
 						active: true,
 						autoRenew: false,
+						gymProfileId,
 					},
 				});
 
@@ -417,20 +605,25 @@ export async function deleteMember(id: string) {
 	if (!session || session.user.role !== "ADMIN") {
 		throw new Error("Unauthorized");
 	}
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
+		const existingMember = await prisma.member.findFirst({
+			where: { id, gymProfileId },
+			select: { id: true },
+		});
+		if (!existingMember) return { success: false, error: "Member not found" };
+
 		const member = await prisma.member.delete({
 			where: { id },
 		});
 
-		await prisma.activityLog.create({
-			data: {
-				userId: session.user.id,
-				action: "DELETE",
-				entity: "Member",
-				entityId: id,
-				details: { name: member.name },
-			},
+		await createActivityLog({
+			userId: session.user.id,
+			action: "DELETE",
+			entity: "Member",
+			entityId: id,
+			details: { name: member.name },
 		});
 
 		revalidatePath("/members");
@@ -441,10 +634,35 @@ export async function deleteMember(id: string) {
 }
 
 export async function getTrainers() {
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
 	return await prisma.user.findMany({
 		where: {
 			role: "TRAINER",
 			active: true,
+			gymProfileId,
+		},
+		select: {
+			id: true,
+			name: true,
+			email: true,
+			phone: true,
+		},
+	});
+}
+
+export async function getTrainersForGymProfile(gymProfileId: string) {
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	if (!isSuperAdmin(session)) throw new Error("Unauthorized");
+
+	return prisma.user.findMany({
+		where: {
+			role: "TRAINER",
+			active: true,
+			gymProfileId,
 		},
 		select: {
 			id: true,

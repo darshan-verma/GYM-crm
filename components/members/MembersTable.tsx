@@ -62,12 +62,14 @@ export default function MembersTable({
   total,
   currentPage,
   totalPages,
+  readOnly = false,
 }: {
   members: Member[]
   trainers: Array<{ id: string; name: string }>
   total: number
   currentPage: number
   totalPages: number
+  readOnly?: boolean
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -171,7 +173,7 @@ export default function MembersTable({
               <TableHead>Trainer</TableHead>
               <TableHead className="text-right">Attendance</TableHead>
               <TableHead className="text-right">Payments</TableHead>
-              <TableHead className="w-[50px]"></TableHead>
+              {!readOnly && <TableHead className="w-[50px]"></TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -236,37 +238,39 @@ export default function MembersTable({
                     </span>
                   </TableCell>
 
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem asChild>
-                          <Link href={`/members/${member.id}`} className="cursor-pointer">
-                            <Eye className="mr-2 h-4 w-4" />
-                            View Details
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link href={`/members/${member.id}/edit`} className="cursor-pointer">
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit Member
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link href={`/billing/payments/new?memberId=${member.id}`} className="cursor-pointer">
-                            <CreditCard className="mr-2 h-4 w-4" />
-                            Record Payment
-                          </Link>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+                  {!readOnly && (
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem asChild>
+                            <Link href={`/members/${member.id}`} className="cursor-pointer">
+                              <Eye className="mr-2 h-4 w-4" />
+                              View Details
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link href={`/members/${member.id}/edit`} className="cursor-pointer">
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit Member
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link href={`/billing/payments/new?memberId=${member.id}`} className="cursor-pointer">
+                              <CreditCard className="mr-2 h-4 w-4" />
+                              Record Payment
+                            </Link>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  )}
                 </TableRow>
               )
             })}

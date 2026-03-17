@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { getDietPlan } from "@/lib/actions/diets";
+import { requireCurrentGymProfileId } from "@/lib/actions/gym-profiles";
 import prisma from "@/lib/db/prisma";
 import DietEditForm from "@/components/forms/DietEditForm";
 
@@ -28,10 +29,12 @@ export default async function EditDietPage({
 	if (!session) {
 		redirect("/login");
 	}
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	const [plan, members] = await Promise.all([
 		getDietPlan(id),
 		prisma.member.findMany({
+			where: { gymProfileId },
 			select: {
 				id: true,
 				name: true,

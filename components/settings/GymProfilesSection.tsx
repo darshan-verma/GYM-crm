@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
 	Card,
 	CardContent,
@@ -28,6 +28,7 @@ import {
 	updateGymProfile,
 	deleteGymProfile,
 	setActiveGymProfile,
+	getGymProfileAdminUser,
 	type GymProfileFormData,
 } from "@/lib/actions/gym-profiles";
 import { useRouter } from "next/navigation";
@@ -55,6 +56,7 @@ export default function GymProfilesSection({
 		watermarkUrl: null,
 		adminUsername: "",
 		adminPassword: "",
+		adminEmail: "",
 	});
 	const [logoUploading, setLogoUploading] = useState(false);
 	const [watermarkUploading, setWatermarkUploading] = useState(false);
@@ -72,6 +74,7 @@ export default function GymProfilesSection({
 			watermarkUrl: null,
 			adminUsername: "",
 			adminPassword: "",
+			adminEmail: "",
 		});
 		setEditingId(null);
 		setOpen(false);
@@ -81,6 +84,8 @@ export default function GymProfilesSection({
 		resetForm();
 		setOpen(true);
 	};
+
+	const [adminUserLoading, setAdminUserLoading] = useState(false);
 
 	const openEdit = (p: GymProfileWithActive) => {
 		const logoUrl = "logoUrl" in p ? (p as { logoUrl?: string | null }).logoUrl : null;
@@ -95,10 +100,32 @@ export default function GymProfilesSection({
 			watermarkUrl: watermarkUrl ?? null,
 			adminUsername: "",
 			adminPassword: "",
+			adminEmail: "",
 		});
 		setEditingId(p.id);
 		setOpen(true);
 	};
+
+	useEffect(() => {
+		if (!open || !editingId) return;
+		let cancelled = false;
+		setAdminUserLoading(true);
+		getGymProfileAdminUser(editingId)
+			.then((admin) => {
+				if (cancelled || !admin) return;
+				setForm((f) => ({
+					...f,
+					adminEmail: admin.email,
+					adminUsername: admin.username ?? "",
+				}));
+			})
+			.finally(() => {
+				if (!cancelled) setAdminUserLoading(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [open, editingId]);
 
 	const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
 		const file = e.target.files?.[0];
@@ -171,13 +198,19 @@ export default function GymProfilesSection({
 				return;
 			}
 		}
-		if (editingId) {
-			await updateGymProfile(editingId, form);
-		} else {
-			await createGymProfile(form);
+		try {
+			if (editingId) {
+				await updateGymProfile(editingId, form);
+				toast.success("Gym profile and login credentials updated.");
+			} else {
+				await createGymProfile(form);
+				toast.success("Gym profile created.");
+			}
+			resetForm();
+			router.refresh();
+		} catch (err) {
+			toast.error((err as Error).message || "Failed to save.");
 		}
-		resetForm();
-		router.refresh();
 	};
 
 	const handleDelete = async (id: string) => {
@@ -383,7 +416,7 @@ export default function GymProfilesSection({
 										/>
 									</div>
 								</div>
-								{!editingId && (
+								{!editingId ? (
 									<div className="grid grid-cols-2 gap-4">
 										<div className="space-y-2">
 											<Label htmlFor="adminUsername">Admin Username *</Label>
@@ -409,6 +442,52 @@ export default function GymProfilesSection({
 												placeholder="Minimum 8 characters"
 												required
 											/>
+										</div>
+									</div>
+								) : (
+									<div className="space-y-4 rounded-lg border p-4 bg-muted/30">
+										<p className="text-sm font-medium text-muted-foreground">
+											Gym admin login (update optional)
+										</p>
+										<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+											<div className="space-y-2 sm:col-span-2">
+												<Label htmlFor="adminEmail">Login ID (Email) *</Label>
+												<Input
+													id="adminEmail"
+													type="email"
+													value={form.adminEmail ?? ""}
+													onChange={(e) =>
+														setForm((f) => ({ ...f, adminEmail: e.target.value }))
+													}
+													placeholder="admin@gym.com"
+													disabled={adminUserLoading}
+												/>
+											</div>
+											<div className="space-y-2">
+												<Label htmlFor="editAdminUsername">Username</Label>
+												<Input
+													id="editAdminUsername"
+													value={form.adminUsername ?? ""}
+													onChange={(e) =>
+														setForm((f) => ({ ...f, adminUsername: e.target.value }))
+													}
+													placeholder="e.g. probodyline_admin"
+													disabled={adminUserLoading}
+												/>
+											</div>
+											<div className="space-y-2">
+												<Label htmlFor="editAdminPassword">New Password</Label>
+												<Input
+													id="editAdminPassword"
+													type="password"
+													value={form.adminPassword ?? ""}
+													onChange={(e) =>
+														setForm((f) => ({ ...f, adminPassword: e.target.value }))
+													}
+													placeholder="Leave blank to keep current"
+													disabled={adminUserLoading}
+												/>
+											</div>
 										</div>
 									</div>
 								)}

@@ -5,6 +5,8 @@ import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { createActivityLog } from "@/lib/utils/activityLog";
+import { requireCurrentGymProfileId } from "./gym-profiles";
+import type { Session } from "next-auth";
 
 interface FoodItem {
 	foodName: string;
@@ -27,11 +29,51 @@ interface Day {
 	meals: Meal[];
 }
 
+function assertSuperAdmin(session: Session | null) {
+	if (!session) throw new Error("Unauthorized");
+	if (session.user.role !== "SUPER_ADMIN") throw new Error("Forbidden");
+}
+
 export async function getDietPlans(memberId?: string) {
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
 	const where: Record<string, unknown> = {};
 
 	if (memberId) {
 		where.memberId = memberId;
+	}
+	where.gymProfileId = gymProfileId;
+
+	return await prisma.dietPlan.findMany({
+		where,
+		include: {
+			member: {
+				select: {
+					id: true,
+					name: true,
+					membershipNumber: true,
+				},
+			},
+		},
+		orderBy: { createdAt: "desc" },
+	});
+}
+
+export async function getDietPlansForGymProfile(params: {
+	gymProfileId: string;
+	memberId?: string;
+}) {
+	const session = await auth();
+	assertSuperAdmin(session);
+
+	const where: Record<string, unknown> = {
+		gymProfileId: params.gymProfileId,
+	};
+
+	if (params.memberId) {
+		where.memberId = params.memberId;
 	}
 
 	return await prisma.dietPlan.findMany({
@@ -50,8 +92,12 @@ export async function getDietPlans(memberId?: string) {
 }
 
 export async function getDietPlan(id: string) {
-	return await prisma.dietPlan.findUnique({
-		where: { id },
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
+	return await prisma.dietPlan.findFirst({
+		where: { id, gymProfileId },
 		include: {
 			member: {
 				select: {
@@ -81,8 +127,15 @@ export async function createDietPlan(data: {
 }) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
+		const member = await prisma.member.findUnique({
+			where: { id: data.memberId, gymProfileId },
+			select: { id: true },
+		});
+		if (!member) return { success: false, error: "Member not found" };
+
 		// Check if it's the new day-wise format or old flat format
 		const isDayWise = Array.isArray(data.meals) && data.meals.length > 0 && 'day' in data.meals[0];
 		
@@ -142,6 +195,7 @@ export async function createDietPlan(data: {
 		await prisma.dietPlan.create({
 			data: {
 				memberId: data.memberId,
+				gymProfileId,
 				name: data.name,
 				description: data.description,
 				meals: data.meals as unknown as Prisma.InputJsonValue,
@@ -188,8 +242,15 @@ export async function updateDietPlan(
 ) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
+		const existing = await prisma.dietPlan.findFirst({
+			where: { id, gymProfileId },
+			select: { id: true },
+		});
+		if (!existing) return { success: false, error: "Diet plan not found" };
+
 		const plan = await prisma.dietPlan.update({
 			where: { id },
 			data: {
@@ -225,8 +286,15 @@ export async function updateDietPlan(
 export async function deleteDietPlan(id: string) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
+		const existing = await prisma.dietPlan.findFirst({
+			where: { id, gymProfileId },
+			select: { id: true },
+		});
+		if (!existing) return { success: false, error: "Diet plan not found" };
+
 		const plan = await prisma.dietPlan.delete({
 			where: { id },
 		});

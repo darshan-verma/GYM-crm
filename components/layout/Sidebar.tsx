@@ -131,6 +131,13 @@ export default function Sidebar({
 	const pathname = usePathname();
 	const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+	const effectiveNavigation = navigation.map((item) => {
+		if (item.href === "/promotions" && user?.role === "SUPER_ADMIN") {
+			return { ...item, name: "Announcements", href: "/announcements" };
+		}
+		return item;
+	});
+
 	return (
 		<>
 			{/* Mobile menu button */}
@@ -187,7 +194,7 @@ export default function Sidebar({
 
 					{/* Navigation */}
 					<nav className="flex-1 overflow-y-auto p-4 space-y-1">
-						{navigation
+						{effectiveNavigation
 							.filter(
 								(item) =>
 									!user?.permissions ||

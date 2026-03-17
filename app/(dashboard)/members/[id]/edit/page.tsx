@@ -1,3 +1,4 @@
+import { auth } from "@/lib/auth";
 import { notFound } from "next/navigation";
 import { getMemberById, getTrainers } from "@/lib/actions/members";
 import { getMembershipPlans } from "@/lib/actions/memberships";
@@ -18,6 +19,11 @@ export default async function EditMemberPage({
 }: {
 	params: Promise<{ id: string }>;
 }) {
+	const session = await auth();
+	if (session?.user?.role === "SUPER_ADMIN") {
+		notFound();
+	}
+
 	const { id } = await params;
 	const [member, trainers, membershipPlans] = await Promise.all([
 		getMemberById(id),

@@ -1,9 +1,12 @@
-import { getWorkoutPlans } from "@/lib/actions/workouts";
+import { getWorkoutPlans, getWorkoutPlansForGymProfile } from "@/lib/actions/workouts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { Plus, Dumbbell, User, Calendar, Target } from "lucide-react";
+import { auth } from "@/lib/auth";
+import { getGymProfilesPaginated } from "@/lib/actions/gym-profiles";
+import GymProfilesWorkoutsTable from "@/components/gym-profiles/GymProfilesWorkoutsTable";
 
 interface _WorkoutPlanWithMember {
 	id: string;
@@ -16,8 +19,63 @@ interface _WorkoutPlanWithMember {
 	exercises: unknown[] | null;
 }
 
-export default async function WorkoutPlansPage() {
-	const plans = await getWorkoutPlans();
+interface SearchParams {
+	gymProfileId?: string;
+	search?: string;
+	page?: string;
+	limit?: string;
+}
+
+export default async function WorkoutPlansPage({
+	searchParams,
+}: {
+	searchParams?: Promise<SearchParams>;
+}) {
+	const session = await auth();
+	const isSuperAdmin = session?.user?.role === "SUPER_ADMIN";
+
+	const params = await searchParams;
+	const gymProfileId = params?.gymProfileId?.trim() || null;
+	const page = params?.page ? parseInt(params.page, 10) : 1;
+	const limit = params?.limit ? parseInt(params.limit, 10) : 20;
+
+	if (isSuperAdmin && !gymProfileId) {
+		const gyms = await getGymProfilesPaginated({
+			search: params?.search,
+			page: Number.isFinite(page) && page > 0 ? page : 1,
+			limit: Number.isFinite(limit) && limit > 0 ? limit : 20,
+		});
+
+		const serializedGyms = JSON.parse(
+			JSON.stringify(gyms.profiles)
+		) as typeof gyms.profiles;
+
+		return (
+			<div className="space-y-6">
+				<div>
+					<h1 className="text-3xl font-bold">Workout Plans</h1>
+					<p className="text-muted-foreground mt-1">
+						Select a gym profile to view its workout plans
+					</p>
+				</div>
+
+				<Card>
+					<GymProfilesWorkoutsTable
+						profiles={serializedGyms}
+						total={gyms.total}
+						currentPage={gyms.currentPage}
+						totalPages={gyms.pages}
+						limit={limit}
+					/>
+				</Card>
+			</div>
+		);
+	}
+
+	const plans =
+		isSuperAdmin && gymProfileId
+			? await getWorkoutPlansForGymProfile({ gymProfileId })
+			: await getWorkoutPlans();
 
 	const getDifficultyColor = (difficulty: string | null) => {
 		switch (difficulty) {
@@ -51,15 +109,23 @@ export default async function WorkoutPlansPage() {
 				<div>
 					<h1 className="text-3xl font-bold">Workout Plans</h1>
 					<p className="text-gray-600 mt-1">
-						Manage and assign workout plans to members
+						{isSuperAdmin && gymProfileId
+							? `View-only (Super Admin) • Gym: ${gymProfileId}`
+							: "Manage and assign workout plans to members"}
 					</p>
 				</div>
-				<Link href="/workouts/new">
-					<Button>
-						<Plus className="h-4 w-4 mr-2" />
-						Create Workout Plan
+				{isSuperAdmin && gymProfileId ? (
+					<Button variant="outline" asChild>
+						<Link href="/workouts">Back to gyms</Link>
 					</Button>
-				</Link>
+				) : (
+					<Link href="/workouts/new">
+						<Button>
+							<Plus className="h-4 w-4 mr-2" />
+							Create Workout Plan
+						</Button>
+					</Link>
+				)}
 			</div>
 
 			{plans.length === 0 ? (
@@ -68,14 +134,18 @@ export default async function WorkoutPlansPage() {
 						<Dumbbell className="h-12 w-12 text-gray-400 mb-4" />
 						<h3 className="text-lg font-semibold mb-2">No workout plans yet</h3>
 						<p className="text-gray-600 mb-6 text-center">
-							Create your first workout plan to start training members
+							{isSuperAdmin && gymProfileId
+								? "No workout plans found for this gym."
+								: "Create your first workout plan to start training members"}
 						</p>
-						<Link href="/workouts/new">
-							<Button>
-								<Plus className="h-4 w-4 mr-2" />
-								Create Workout Plan
-							</Button>
-						</Link>
+						{isSuperAdmin && gymProfileId ? null : (
+							<Link href="/workouts/new">
+								<Button>
+									<Plus className="h-4 w-4 mr-2" />
+									Create Workout Plan
+								</Button>
+							</Link>
+						)}
 					</CardContent>
 				</Card>
 			) : (
@@ -88,12 +158,16 @@ export default async function WorkoutPlansPage() {
 										<CardTitle className="text-lg mb-2">{plan.name}</CardTitle>
 										<div className="flex items-center gap-2 text-sm text-gray-600">
 											<User className="h-4 w-4" />
-											<Link
-												href={`/members/${plan.member.id}`}
-												className="hover:text-blue-600 hover:underline"
-											>
-												{plan.member.name}
-											</Link>
+											{isSuperAdmin && gymProfileId ? (
+												<span>{plan.member.name}</span>
+											) : (
+												<Link
+													href={`/members/${plan.member.id}`}
+													className="hover:text-blue-600 hover:underline"
+												>
+													{plan.member.name}
+												</Link>
+											)}
 										</div>
 									</div>
 									{!plan.active && (
@@ -143,18 +217,20 @@ export default async function WorkoutPlansPage() {
 									</div>
 								</div>
 
-								<div className="flex gap-2 pt-4">
-									<Link href={`/workouts/${plan.id}`} className="flex-1">
-										<Button variant="outline" className="w-full" size="sm">
-											View Details
-										</Button>
-									</Link>
-									<Link href={`/workouts/${plan.id}/edit`}>
-										<Button variant="ghost" size="sm">
-											Edit
-										</Button>
-									</Link>
-								</div>
+								{isSuperAdmin && gymProfileId ? null : (
+									<div className="flex gap-2 pt-4">
+										<Link href={`/workouts/${plan.id}`} className="flex-1">
+											<Button variant="outline" className="w-full" size="sm">
+												View Details
+											</Button>
+										</Link>
+										<Link href={`/workouts/${plan.id}/edit`}>
+											<Button variant="ghost" size="sm">
+												Edit
+											</Button>
+										</Link>
+									</div>
+								)}
 							</CardContent>
 						</Card>
 					))}

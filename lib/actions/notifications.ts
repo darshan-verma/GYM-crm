@@ -2,6 +2,8 @@
 
 import prisma from "@/lib/db/prisma";
 import { InAppNotificationType, InAppNotificationStatus } from "@prisma/client";
+import { auth } from "@/lib/auth";
+import { getCurrentGymProfile } from "./gym-profiles";
 
 export interface NotificationItem {
   id: string;
@@ -51,8 +53,23 @@ function transformNotification(notification: {
 // Get all notifications grouped by type
 export async function getNotifications() {
   try {
+    const session = await auth();
+    if (!session) throw new Error("Unauthorized");
+    const gym = await getCurrentGymProfile(session);
+    if (!gym?.id) {
+      // No gym profile (e.g. Super Admin with no active gym selected) — return empty
+      return {
+        success: true,
+        data: { leads: [], payments: [], members: [], announcements: [] },
+        total: 0,
+        unreadCount: 0,
+      };
+    }
+    const gymProfileId = gym.id;
+
     const notifications = await prisma.inAppNotification.findMany({
       where: {
+        gymProfileId,
         status: {
           not: InAppNotificationStatus.DISMISSED,
         },
@@ -74,6 +91,7 @@ export async function getNotifications() {
           n.type === InAppNotificationType.MEMBERSHIP_EXPIRING ||
           n.type === InAppNotificationType.NEW_MEMBER
       ),
+      announcements: transformedNotifications.filter((n) => n.type === ("ANNOUNCEMENT" as InAppNotificationType)),
     };
 
     return {
@@ -87,7 +105,7 @@ export async function getNotifications() {
     return {
       success: false,
       error: "Failed to fetch notifications",
-      data: { leads: [], payments: [], members: [] },
+      data: { leads: [], payments: [], members: [], announcements: [] },
       total: 0,
       unreadCount: 0,
     };
@@ -97,13 +115,19 @@ export async function getNotifications() {
 // Mark notification as read
 export async function markNotificationAsRead(notificationId: string) {
   try {
-    await prisma.inAppNotification.update({
-      where: { id: notificationId },
+    const session = await auth();
+    if (!session) throw new Error("Unauthorized");
+    const gym = await getCurrentGymProfile(session);
+    if (!gym?.id) return { success: true };
+
+    const updated = await prisma.inAppNotification.updateMany({
+      where: { id: notificationId, gymProfileId: gym.id },
       data: {
         status: InAppNotificationStatus.READ,
         readAt: new Date(),
       },
     });
+    if (updated.count === 0) return { success: false, error: "Notification not found" };
     return { success: true };
   } catch (error) {
     console.error("Mark notification as read error:", error);
@@ -114,13 +138,19 @@ export async function markNotificationAsRead(notificationId: string) {
 // Dismiss notification
 export async function dismissNotification(notificationId: string) {
   try {
-    await prisma.inAppNotification.update({
-      where: { id: notificationId },
+    const session = await auth();
+    if (!session) throw new Error("Unauthorized");
+    const gym = await getCurrentGymProfile(session);
+    if (!gym?.id) return { success: true };
+
+    const updated = await prisma.inAppNotification.updateMany({
+      where: { id: notificationId, gymProfileId: gym.id },
       data: {
         status: InAppNotificationStatus.DISMISSED,
         dismissedAt: new Date(),
       },
     });
+    if (updated.count === 0) return { success: false, error: "Notification not found" };
     return { success: true };
   } catch (error) {
     console.error("Dismiss notification error:", error);
@@ -131,8 +161,14 @@ export async function dismissNotification(notificationId: string) {
 // Mark all notifications as read
 export async function markAllNotificationsAsRead() {
   try {
+    const session = await auth();
+    if (!session) throw new Error("Unauthorized");
+    const gym = await getCurrentGymProfile(session);
+    if (!gym?.id) return { success: true };
+
     await prisma.inAppNotification.updateMany({
       where: {
+        gymProfileId: gym.id,
         status: InAppNotificationStatus.UNREAD,
       },
       data: {
@@ -169,6 +205,10 @@ function formatTimeRemaining(date: Date): string {
 // Check and create/update notifications for leads (2 hours before follow-up)
 export async function checkLeadFollowUpNotifications() {
   try {
+    const gyms = await prisma.gymProfile.findMany({ select: { id: true } });
+    let updatedCount = 0;
+
+    for (const gym of gyms) {
     const twoHoursFromNow = new Date();
     twoHoursFromNow.setHours(twoHoursFromNow.getHours() + 2);
 
@@ -178,6 +218,7 @@ export async function checkLeadFollowUpNotifications() {
     // Find leads with follow-up dates in the next 2 hours
     const leads = await prisma.lead.findMany({
       where: {
+        gymProfileId: gym.id,
         followUpDate: {
           gte: oneHourAgo,
           lte: twoHoursFromNow,
@@ -199,6 +240,7 @@ export async function checkLeadFollowUpNotifications() {
       // Check if notification already exists
       const existing = await prisma.inAppNotification.findFirst({
         where: {
+          gymProfileId: gym.id,
           type: InAppNotificationType.LEAD_FOLLOW_UP,
           entityType: "Lead",
           entityId: lead.id,
@@ -226,6 +268,7 @@ export async function checkLeadFollowUpNotifications() {
         // Create new notification
         const notification = await prisma.inAppNotification.create({
           data: {
+            gymProfileId: gym.id,
             type: InAppNotificationType.LEAD_FOLLOW_UP,
             title: "Lead Follow-up Reminder",
             message: `Follow up with ${lead.name} in ${timeRemaining}`,
@@ -246,6 +289,7 @@ export async function checkLeadFollowUpNotifications() {
     const leadIds = leads.map((l) => l.id);
     await prisma.inAppNotification.updateMany({
       where: {
+        gymProfileId: gym.id,
         type: InAppNotificationType.LEAD_FOLLOW_UP,
         entityType: "Lead",
         entityId: {
@@ -261,7 +305,10 @@ export async function checkLeadFollowUpNotifications() {
       },
     });
 
-    return { success: true, count: notificationsUpdated.length };
+    updatedCount += notificationsUpdated.length;
+    }
+
+    return { success: true, count: updatedCount };
   } catch (error) {
     console.error("Check lead follow-up notifications error:", error);
     return { success: false, error: "Failed to check lead notifications" };
@@ -271,6 +318,10 @@ export async function checkLeadFollowUpNotifications() {
 // Check and create/update notifications for payment dues (3 days before membership expiry)
 export async function checkPaymentDueNotifications() {
   try {
+    const gyms = await prisma.gymProfile.findMany({ select: { id: true } });
+    let updatedCount = 0;
+
+    for (const gym of gyms) {
     const threeDaysFromNow = new Date();
     threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
     threeDaysFromNow.setHours(23, 59, 59, 999);
@@ -281,6 +332,7 @@ export async function checkPaymentDueNotifications() {
     // Find active memberships expiring in 3 days or less
     const memberships = await prisma.membership.findMany({
       where: {
+        gymProfileId: gym.id,
         active: true,
         endDate: {
           gte: today,
@@ -313,6 +365,7 @@ export async function checkPaymentDueNotifications() {
       // Check if notification already exists
       const existing = await prisma.inAppNotification.findFirst({
         where: {
+          gymProfileId: gym.id,
           type: InAppNotificationType.PAYMENT_DUE,
           entityType: "Payment",
           entityId: membership.id,
@@ -343,6 +396,7 @@ export async function checkPaymentDueNotifications() {
         // Create new notification
         const notification = await prisma.inAppNotification.create({
           data: {
+            gymProfileId: gym.id,
             type: InAppNotificationType.PAYMENT_DUE,
             title: "Payment Due Reminder",
             message: `Payment due for ${membership.member.name} - Membership expires in ${timeRemaining}`,
@@ -366,6 +420,7 @@ export async function checkPaymentDueNotifications() {
     const membershipIds = memberships.map((m) => m.id);
     await prisma.inAppNotification.updateMany({
       where: {
+        gymProfileId: gym.id,
         type: InAppNotificationType.PAYMENT_DUE,
         entityType: "Payment",
         entityId: {
@@ -381,7 +436,10 @@ export async function checkPaymentDueNotifications() {
       },
     });
 
-    return { success: true, count: notificationsUpdated.length };
+    updatedCount += notificationsUpdated.length;
+    }
+
+    return { success: true, count: updatedCount };
   } catch (error) {
     console.error("Check payment due notifications error:", error);
     return { success: false, error: "Failed to check payment notifications" };
@@ -391,6 +449,10 @@ export async function checkPaymentDueNotifications() {
 // Check and create/update notifications for membership expiring (3 days before)
 export async function checkMembershipExpiringNotifications() {
   try {
+    const gyms = await prisma.gymProfile.findMany({ select: { id: true } });
+    let updatedCount = 0;
+
+    for (const gym of gyms) {
     const threeDaysFromNow = new Date();
     threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
     threeDaysFromNow.setHours(23, 59, 59, 999);
@@ -401,6 +463,7 @@ export async function checkMembershipExpiringNotifications() {
     // Find active memberships expiring in 3 days or less
     const memberships = await prisma.membership.findMany({
       where: {
+        gymProfileId: gym.id,
         active: true,
         endDate: {
           gte: today,
@@ -432,6 +495,7 @@ export async function checkMembershipExpiringNotifications() {
       // Check if notification already exists
       const existing = await prisma.inAppNotification.findFirst({
         where: {
+          gymProfileId: gym.id,
           type: InAppNotificationType.MEMBERSHIP_EXPIRING,
           entityType: "Member",
           entityId: membership.memberId,
@@ -460,6 +524,7 @@ export async function checkMembershipExpiringNotifications() {
         // Create new notification
         const notification = await prisma.inAppNotification.create({
           data: {
+            gymProfileId: gym.id,
             type: InAppNotificationType.MEMBERSHIP_EXPIRING,
             title: "Membership Expiring Soon",
             message: `${membership.member.name}'s membership expires in ${timeRemaining}`,
@@ -481,6 +546,7 @@ export async function checkMembershipExpiringNotifications() {
     const memberIds = memberships.map((m) => m.memberId);
     await prisma.inAppNotification.updateMany({
       where: {
+        gymProfileId: gym.id,
         type: InAppNotificationType.MEMBERSHIP_EXPIRING,
         entityType: "Member",
         entityId: {
@@ -496,7 +562,10 @@ export async function checkMembershipExpiringNotifications() {
       },
     });
 
-    return { success: true, count: notificationsUpdated.length };
+    updatedCount += notificationsUpdated.length;
+    }
+
+    return { success: true, count: updatedCount };
   } catch (error) {
     console.error("Check membership expiring notifications error:", error);
     return { success: false, error: "Failed to check membership notifications" };
@@ -506,9 +575,16 @@ export async function checkMembershipExpiringNotifications() {
 // Create notification for new member
 export async function createNewMemberNotification(memberId: string, memberName: string, membershipNumber: string) {
   try {
+    const member = await prisma.member.findUnique({
+      where: { id: memberId },
+      select: { gymProfileId: true },
+    });
+    if (!member) return { success: false, error: "Member not found" };
+
     // Check if notification already exists
     const existing = await prisma.inAppNotification.findFirst({
       where: {
+        gymProfileId: member.gymProfileId,
         type: InAppNotificationType.NEW_MEMBER,
         entityType: "Member",
         entityId: memberId,
@@ -522,6 +598,7 @@ export async function createNewMemberNotification(memberId: string, memberName: 
     // Create notification
     const notification = await prisma.inAppNotification.create({
       data: {
+        gymProfileId: member.gymProfileId,
         type: InAppNotificationType.NEW_MEMBER,
         title: "New Member Added",
         message: `New member ${memberName} (${membershipNumber}) has been added`,
@@ -548,10 +625,30 @@ export async function updateLeadNotification(leadId: string) {
       where: { id: leadId },
     });
 
-    if (!lead || !lead.followUpDate) {
+    if (!lead) {
+      // Lead deleted: dismiss any associated notifications across gyms
+      await prisma.inAppNotification.updateMany({
+        where: {
+          type: InAppNotificationType.LEAD_FOLLOW_UP,
+          entityType: "Lead",
+          entityId: leadId,
+          status: {
+            not: InAppNotificationStatus.DISMISSED,
+          },
+        },
+        data: {
+          status: InAppNotificationStatus.DISMISSED,
+          dismissedAt: new Date(),
+        },
+      });
+      return { success: true };
+    }
+
+    if (!lead.followUpDate) {
       // Remove notification if lead doesn't have follow-up date
       await prisma.inAppNotification.updateMany({
         where: {
+          gymProfileId: lead.gymProfileId,
           type: InAppNotificationType.LEAD_FOLLOW_UP,
           entityType: "Lead",
           entityId: leadId,
@@ -578,6 +675,7 @@ export async function updateLeadNotification(leadId: string) {
       // Update or create notification
       const existing = await prisma.inAppNotification.findFirst({
         where: {
+          gymProfileId: lead.gymProfileId,
           type: InAppNotificationType.LEAD_FOLLOW_UP,
           entityType: "Lead",
           entityId: leadId,
@@ -602,6 +700,7 @@ export async function updateLeadNotification(leadId: string) {
       } else {
         await prisma.inAppNotification.create({
           data: {
+            gymProfileId: lead.gymProfileId,
             type: InAppNotificationType.LEAD_FOLLOW_UP,
             title: "Lead Follow-up Reminder",
             message: `Follow up with ${lead.name} in ${timeRemaining}`,
@@ -619,6 +718,7 @@ export async function updateLeadNotification(leadId: string) {
       // Remove notification if outside window
       await prisma.inAppNotification.updateMany({
         where: {
+          gymProfileId: lead.gymProfileId,
           type: InAppNotificationType.LEAD_FOLLOW_UP,
           entityType: "Lead",
           entityId: leadId,
@@ -670,6 +770,7 @@ export async function updateMembershipNotifications(membershipId: string) {
       // Remove notifications if membership is not active
       await prisma.inAppNotification.updateMany({
         where: {
+          gymProfileId: membership.gymProfileId,
           OR: [
             {
               type: InAppNotificationType.PAYMENT_DUE,
@@ -708,6 +809,7 @@ export async function updateMembershipNotifications(membershipId: string) {
       // Update or create payment due notification
       const existingPayment = await prisma.inAppNotification.findFirst({
         where: {
+          gymProfileId: membership.gymProfileId,
           type: InAppNotificationType.PAYMENT_DUE,
           entityType: "Payment",
           entityId: membershipId,
@@ -735,6 +837,7 @@ export async function updateMembershipNotifications(membershipId: string) {
       } else {
         await prisma.inAppNotification.create({
           data: {
+            gymProfileId: membership.gymProfileId,
             type: InAppNotificationType.PAYMENT_DUE,
             title: "Payment Due Reminder",
             message: `Payment due for ${membership.member.name} - Membership expires in ${timeRemaining}`,
@@ -755,6 +858,7 @@ export async function updateMembershipNotifications(membershipId: string) {
       // Update or create membership expiring notification
       const existingMember = await prisma.inAppNotification.findFirst({
         where: {
+          gymProfileId: membership.gymProfileId,
           type: InAppNotificationType.MEMBERSHIP_EXPIRING,
           entityType: "Member",
           entityId: membership.memberId,
@@ -780,6 +884,7 @@ export async function updateMembershipNotifications(membershipId: string) {
       } else {
         await prisma.inAppNotification.create({
           data: {
+            gymProfileId: membership.gymProfileId,
             type: InAppNotificationType.MEMBERSHIP_EXPIRING,
             title: "Membership Expiring Soon",
             message: `${membership.member.name}'s membership expires in ${timeRemaining}`,
@@ -798,6 +903,7 @@ export async function updateMembershipNotifications(membershipId: string) {
       // Remove notifications if outside window
       await prisma.inAppNotification.updateMany({
         where: {
+          gymProfileId: membership.gymProfileId,
           OR: [
             {
               type: InAppNotificationType.PAYMENT_DUE,

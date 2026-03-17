@@ -3,6 +3,7 @@
 import prisma from "@/lib/db/prisma";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
+import { requireCurrentGymProfileId } from "./gym-profiles";
 
 export type PromoImageInput = { id: string; url: string };
 
@@ -12,14 +13,14 @@ export async function createPromotion(data: {
 	images: PromoImageInput[];
 	ctaText?: string | null;
 	ctaLink?: string | null;
-	gymId?: string | null;
 }) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	const promotion = await prisma.promotion.create({
 		data: {
-			gymId: data.gymId || null,
+			gymProfileId,
 			title: data.title,
 			description: data.description as object,
 			ctaText: data.ctaText || null,
@@ -41,12 +42,17 @@ export async function getPromotions(params?: {
 	page?: number;
 	limit?: number;
 }) {
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
 	const page = params?.page ?? 1;
 	const limit = params?.limit ?? 20;
 	const skip = (page - 1) * limit;
 
 	const [promotions, total] = await Promise.all([
 		prisma.promotion.findMany({
+			where: { gymProfileId },
 			include: {
 				images: { orderBy: { position: "asc" } },
 			},
@@ -54,7 +60,7 @@ export async function getPromotions(params?: {
 			skip,
 			take: limit,
 		}),
-		prisma.promotion.count(),
+		prisma.promotion.count({ where: { gymProfileId } }),
 	]);
 
 	return {
@@ -66,8 +72,12 @@ export async function getPromotions(params?: {
 }
 
 export async function getPromotionById(id: string) {
-	return prisma.promotion.findUnique({
-		where: { id },
+	const session = await auth();
+	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
+	return prisma.promotion.findFirst({
+		where: { id, gymProfileId },
 		include: {
 			images: { orderBy: { position: "asc" } },
 		},
@@ -86,8 +96,17 @@ export async function updatePromotion(
 ) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
 
-	await prisma.promotionImage.deleteMany({ where: { promotionId: id } });
+	const existing = await prisma.promotion.findFirst({
+		where: { id, gymProfileId },
+		select: { id: true },
+	});
+	if (!existing) throw new Error("Promotion not found");
+
+	await prisma.promotionImage.deleteMany({
+		where: { promotionId: id, promotion: { gymProfileId } },
+	});
 
 	await prisma.promotion.update({
 		where: { id },
@@ -114,6 +133,13 @@ export async function updatePromotion(
 export async function deletePromotion(id: string) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
+	const gymProfileId = await requireCurrentGymProfileId(session);
+
+	const existing = await prisma.promotion.findFirst({
+		where: { id, gymProfileId },
+		select: { id: true },
+	});
+	if (!existing) throw new Error("Promotion not found");
 
 	await prisma.promotion.delete({ where: { id } });
 	revalidatePath("/promotions");

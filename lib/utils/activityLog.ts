@@ -18,7 +18,7 @@ export async function createActivityLog(data: {
     // Verify user exists before creating activity log
     const user = await prisma.user.findUnique({
       where: { id: data.userId },
-      select: { id: true },
+      select: { id: true, gymProfileId: true },
     });
 
     if (!user) {
@@ -26,9 +26,17 @@ export async function createActivityLog(data: {
       return { success: false, error: "User not found" };
     }
 
+    if (!user.gymProfileId) {
+      console.warn(
+        `User ${data.userId} has no gymProfileId, skipping activity log creation`
+      );
+      return { success: false, error: "User has no gym profile" };
+    }
+
     await prisma.activityLog.create({
       data: {
         userId: data.userId,
+        gymProfileId: user.gymProfileId,
         action: data.action,
         entity: data.entity,
         entityId: data.entityId || null,
