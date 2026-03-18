@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +29,8 @@ import {
 import { foodDatabase } from "@/lib/data/food-database";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { useEffect } from "react";
+import { useFormDraft } from "@/lib/hooks/useFormDraft";
+import { DRAFT_KEYS } from "@/lib/utils/draft";
 
 interface Member {
 	id: string;
@@ -102,7 +103,7 @@ export default function DietForm({
 	const [showAddCategory, setShowAddCategory] = useState(false);
 	const [newCategoryName, setNewCategoryName] = useState("");
 
-	const [formData, setFormData] = useState({
+	const defaultFormData = {
 		memberId: "",
 		name: "",
 		description: "",
@@ -113,14 +114,41 @@ export default function DietForm({
 		fatTarget: 0,
 		startDate: "",
 		endDate: "",
-	});
+	};
 
-	const [days, setDays] = useState<Day[]>([
+	const defaultDays: Day[] = [
 		{
 			day: "Day 1",
 			meals: [{ mealName: "Breakfast", foods: [] }],
 		},
-	]);
+	];
+
+	const { draft, saveDraft, clearDraft } = useFormDraft<{
+		formData: typeof defaultFormData;
+		days: Day[];
+	}>(DRAFT_KEYS.DIET, { enabled: true, debounceMs: 600 });
+
+	const draftApplied = useRef(false);
+	const skipFirstSave = useRef(true);
+	const [formData, setFormData] = useState(defaultFormData);
+	const [days, setDays] = useState<Day[]>(defaultDays);
+
+	useEffect(() => {
+		if (draft && !draftApplied.current) {
+			draftApplied.current = true;
+			if (draft.formData) setFormData(draft.formData);
+			if (draft.days && draft.days.length > 0) setDays(draft.days);
+			toast.info("Draft restored");
+		}
+	}, [draft]);
+
+	useEffect(() => {
+		if (skipFirstSave.current) {
+			skipFirstSave.current = false;
+			return;
+		}
+		saveDraft({ formData, days });
+	}, [formData, days, saveDraft]);
 
 	useEffect(() => {
 		// Seed default diet types if none exist
@@ -467,6 +495,7 @@ export default function DietForm({
 			});
 
 			if (result.success) {
+				clearDraft();
 				toast.success("Diet plan created successfully");
 				router.push("/diets");
 				router.refresh();
@@ -1158,7 +1187,10 @@ export default function DietForm({
 				<Button
 					type="button"
 					variant="outline"
-					onClick={() => router.back()}
+					onClick={() => {
+						clearDraft();
+						router.back();
+					}}
 					disabled={loading}
 				>
 					Cancel

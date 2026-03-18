@@ -131,12 +131,14 @@ export default function Sidebar({
 	const pathname = usePathname();
 	const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-	const effectiveNavigation = navigation.map((item) => {
-		if (item.href === "/promotions" && user?.role === "SUPER_ADMIN") {
-			return { ...item, name: "Announcements", href: "/announcements" };
-		}
-		return item;
-	});
+	const effectiveNavigation = navigation
+		.filter((item) => !(item.href === "/attendance" && user?.role === "SUPER_ADMIN"))
+		.map((item) => {
+			if (item.href === "/promotions" && user?.role === "SUPER_ADMIN") {
+				return { ...item, name: "Announcements", href: "/announcements" };
+			}
+			return item;
+		});
 
 	return (
 		<>

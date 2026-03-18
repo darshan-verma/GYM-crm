@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import LeadForm from "@/components/forms/LeadForm";
+import NewLeadFormWrapper from "@/components/forms/NewLeadFormWrapper";
 
 export default function NewLeadPage() {
 	return (
@@ -28,7 +28,7 @@ export default function NewLeadPage() {
 					<CardTitle>Lead Information</CardTitle>
 				</CardHeader>
 				<CardContent>
-					<LeadForm />
+					<NewLeadFormWrapper />
 				</CardContent>
 			</Card>
 		</div>

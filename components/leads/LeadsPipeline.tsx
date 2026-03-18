@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useOptimistic, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateLeadStatus } from '@/lib/actions/leads'
 import { Card, CardHeader, CardTitle } from '@/components/ui/card'
@@ -33,9 +33,33 @@ export default function LeadsPipeline({
   readOnly = false,
 }: LeadsPipelineProps) {
   const router = useRouter()
-  const [draggedLead, setDraggedLead] = useState<string | null>(null)
+  const [draggedLead, setDraggedLead] = useState<{ id: string; fromStatus: LeadStatus } | null>(null)
   const [convertDialogOpen, setConvertDialogOpen] = useState(false)
   const [leadToConvert, setLeadToConvert] = useState<{ id: string; name: string } | null>(null)
+
+  const [optimisticLeadsByStatus, setOptimisticLeadsByStatus] = useOptimistic(
+    leadsByStatus,
+    (
+      state: Record<LeadStatus, Lead[]>,
+      action: { leadId: string; fromStatus: LeadStatus; toStatus: LeadStatus }
+    ) => {
+      if (action.fromStatus === action.toStatus) return state
+
+      const from = state[action.fromStatus] ?? []
+      const to = state[action.toStatus] ?? []
+      const idx = from.findIndex((l) => l.id === action.leadId)
+      if (idx === -1) return state
+
+      const lead = from[idx]
+      const updatedLead = { ...lead, status: action.toStatus }
+
+      return {
+        ...state,
+        [action.fromStatus]: [...from.slice(0, idx), ...from.slice(idx + 1)],
+        [action.toStatus]: [updatedLead, ...to],
+      }
+    }
+  )
 
   async function handleDrop(status: LeadStatus) {
     if (readOnly) return
@@ -43,7 +67,7 @@ export default function LeadsPipeline({
 
     // If dropping to CONVERTED, show confirmation dialog
     if (status === 'CONVERTED') {
-      const lead = Object.values(leadsByStatus).flat().find(l => l.id === draggedLead)
+      const lead = Object.values(optimisticLeadsByStatus).flat().find(l => l.id === draggedLead.id)
       if (lead) {
         setLeadToConvert({ id: lead.id, name: lead.name })
         setConvertDialogOpen(true)
@@ -53,7 +77,13 @@ export default function LeadsPipeline({
     }
 
     // For other statuses, update directly
-    const result = await updateLeadStatus(draggedLead, status)
+    setOptimisticLeadsByStatus({
+      leadId: draggedLead.id,
+      fromStatus: draggedLead.fromStatus,
+      toStatus: status,
+    })
+
+    const result = await updateLeadStatus(draggedLead.id, status)
 
     if (result.success) {
       toast.success('Lead Updated', {
@@ -64,6 +94,8 @@ export default function LeadsPipeline({
       toast.error('Error', {
         description: result.error,
       })
+      // Roll back optimistic state by re-fetching server state.
+      router.refresh()
     }
 
     setDraggedLead(null)
@@ -73,7 +105,7 @@ export default function LeadsPipeline({
     <>
     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
       {columns.map((column) => {
-        const leads = leadsByStatus[column.status] || []
+        const leads = optimisticLeadsByStatus[column.status] || []
         const count = statusCounts?.[column.status] ?? leads.length
 
         return (
@@ -103,7 +135,7 @@ export default function LeadsPipeline({
                 <div
                   key={lead.id}
                   draggable={!readOnly}
-                  onDragStart={() => !readOnly && setDraggedLead(lead.id)}
+                  onDragStart={() => !readOnly && setDraggedLead({ id: lead.id, fromStatus: column.status })}
                   onDragEnd={() => setDraggedLead(null)}
                   className={readOnly ? '' : 'cursor-move'}
                 >

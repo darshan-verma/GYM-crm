@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Bell, Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import GlobalSearch from "./GlobalSearch";
 import { Badge } from "@/components/ui/badge";
 import NotificationPopup from "./NotificationPopup";
 import { getNotifications } from "@/lib/actions/notifications";
@@ -52,17 +52,7 @@ export default function Header({ user: _user }: { user?: User }) {
 	return (
 		<>
 			<header className="sticky top-0 z-30 h-16 bg-white border-b px-4 lg:px-8 flex items-center gap-4">
-				{/* Search */}
-				<div className="flex-1 max-w-md">
-					<div className="relative">
-						<Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-						<Input
-							type="search"
-							placeholder="Search members, payments..."
-							className="pl-9 h-10"
-						/>
-					</div>
-				</div>
+				<GlobalSearch />
 
 				{/* Actions */}
 				<div className="flex items-center gap-2">

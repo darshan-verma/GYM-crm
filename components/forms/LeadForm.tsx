@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createLead, updateLead } from "@/lib/actions/leads";
 import { Button } from "@/components/ui/button";
@@ -37,17 +37,112 @@ interface Lead {
 	priority?: string | null;
 }
 
+export interface LeadFormDraft {
+	name?: string;
+	phone?: string;
+	email?: string;
+	source?: string;
+	interestedPlan?: string;
+	followUpDate?: string;
+	notes?: string;
+}
+
 interface LeadFormProps {
 	isEdit?: boolean;
 	initialData?: Lead;
+	initialFromDraft?: LeadFormDraft | null;
+	onSaveDraft?: (data: LeadFormDraft) => void;
+	onClearDraft?: () => void;
+}
+
+function getInitialValues(initialData?: Lead, draft?: LeadFormDraft | null) {
+	if (draft) {
+		return {
+			name: draft.name ?? "",
+			phone: draft.phone ?? "",
+			email: draft.email ?? "",
+			source: draft.source ?? "",
+			interestedPlan: draft.interestedPlan ?? "",
+			followUpDate: draft.followUpDate ?? "",
+			notes: draft.notes ?? "",
+		};
+	}
+	if (initialData) {
+		return {
+			name: initialData.name,
+			phone: initialData.phone,
+			email: initialData.email ?? "",
+			source: initialData.source,
+			interestedPlan: initialData.interestedPlan ?? "",
+			followUpDate: initialData.followUpDate
+				? new Date(initialData.followUpDate).toISOString().slice(0, 16)
+				: "",
+			notes: initialData.notes ?? "",
+		};
+	}
+	return {
+		name: "",
+		phone: "",
+		email: "",
+		source: "",
+		interestedPlan: "",
+		followUpDate: "",
+		notes: "",
+	};
 }
 
 export default function LeadForm({
 	isEdit = false,
 	initialData,
+	initialFromDraft,
+	onSaveDraft,
+	onClearDraft,
 }: LeadFormProps) {
 	const router = useRouter();
+	const formRef = useRef<HTMLFormElement>(null);
+	const initial = getInitialValues(initialData, initialFromDraft);
 	const [loading, setLoading] = useState(false);
+
+	const [draftRestored, setDraftRestored] = useState(false);
+	useEffect(() => {
+		if (initialFromDraft && !draftRestored && !isEdit) {
+			toast.info("Draft restored");
+			setDraftRestored(true);
+		}
+	}, [initialFromDraft, draftRestored, isEdit]);
+
+	const saveDraftFromForm = useCallback(() => {
+		if (!formRef.current || !onSaveDraft || isEdit) return;
+		const form = formRef.current;
+		const fd = new FormData(form);
+		onSaveDraft({
+			name: (fd.get("name") as string) ?? "",
+			phone: (fd.get("phone") as string) ?? "",
+			email: (fd.get("email") as string) ?? "",
+			source: (fd.get("source") as string) ?? "",
+			interestedPlan: (fd.get("interestedPlan") as string) ?? "",
+			followUpDate: (fd.get("followUpDate") as string) ?? "",
+			notes: (fd.get("notes") as string) ?? "",
+		});
+	}, [onSaveDraft, isEdit]);
+
+	useEffect(() => {
+		if (!onSaveDraft || isEdit) return;
+		const form = formRef.current;
+		if (!form) return;
+		const handleChange = () => {
+			if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+			saveTimeoutRef.current = setTimeout(saveDraftFromForm, 600);
+		};
+		const saveTimeoutRef = { current: null as ReturnType<typeof setTimeout> | null };
+		form.addEventListener("input", handleChange);
+		form.addEventListener("change", handleChange);
+		return () => {
+			form.removeEventListener("input", handleChange);
+			form.removeEventListener("change", handleChange);
+			if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+		};
+	}, [onSaveDraft, isEdit, saveDraftFromForm]);
 
 	async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
 		e.preventDefault();
@@ -73,6 +168,7 @@ export default function LeadForm({
 					: await createLead(data);
 
 			if (result.success) {
+				if (!isEdit) onClearDraft?.();
 				toast.success(
 					isEdit ? "Lead updated successfully" : "Lead created successfully"
 				);
@@ -91,7 +187,7 @@ export default function LeadForm({
 	}
 
 	return (
-		<form onSubmit={handleSubmit} className="space-y-6">
+		<form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
 			<div className="grid gap-4 md:grid-cols-2">
 				{/* Name */}
 				<div className="space-y-2">
@@ -100,7 +196,7 @@ export default function LeadForm({
 						id="name"
 						name="name"
 						placeholder="Enter lead's full name"
-						defaultValue={initialData?.name}
+						defaultValue={initial.name}
 						disabled={loading}
 						required
 					/>
@@ -113,7 +209,7 @@ export default function LeadForm({
 						id="phone"
 						name="phone"
 						placeholder="Enter phone number"
-						defaultValue={initialData?.phone}
+						defaultValue={initial.phone}
 						disabled={loading}
 						required
 					/>
@@ -127,7 +223,7 @@ export default function LeadForm({
 						name="email"
 						type="email"
 						placeholder="Enter email address"
-						defaultValue={initialData?.email || undefined}
+						defaultValue={initial.email}
 						disabled={loading}
 					/>
 				</div>
@@ -137,7 +233,7 @@ export default function LeadForm({
 					<Label htmlFor="source">Lead Source *</Label>
 					<Select
 						name="source"
-						defaultValue={initialData?.source}
+						defaultValue={initial.source}
 						disabled={loading}
 						required
 					>
@@ -162,7 +258,7 @@ export default function LeadForm({
 						id="interestedPlan"
 						name="interestedPlan"
 						placeholder="e.g., 3 Month Plan, Personal Training"
-						defaultValue={initialData?.interestedPlan || undefined}
+						defaultValue={initial.interestedPlan}
 						disabled={loading}
 					/>
 				</div>
@@ -174,11 +270,7 @@ export default function LeadForm({
 						id="followUpDate"
 						name="followUpDate"
 						type="datetime-local"
-						defaultValue={
-							initialData?.followUpDate
-								? new Date(initialData.followUpDate).toISOString().slice(0, 16)
-								: ""
-						}
+						defaultValue={initial.followUpDate}
 						disabled={loading}
 					/>
 				</div>
@@ -191,7 +283,7 @@ export default function LeadForm({
 					id="notes"
 					name="notes"
 					placeholder="Additional notes about the lead"
-					defaultValue={initialData?.notes || undefined}
+					defaultValue={initial.notes}
 					disabled={loading}
 					rows={3}
 				/>
@@ -203,7 +295,14 @@ export default function LeadForm({
 					{loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
 					{isEdit ? "Update Lead" : "Create Lead"}
 				</Button>
-				<Button type="button" variant="outline" onClick={() => router.back()}>
+				<Button
+					type="button"
+					variant="outline"
+					onClick={() => {
+						if (!isEdit) onClearDraft?.();
+						router.back();
+					}}
+				>
 					Cancel
 				</Button>
 			</div>

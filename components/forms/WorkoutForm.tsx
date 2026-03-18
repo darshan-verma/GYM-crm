@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,8 +14,9 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
-import { useEffect } from "react";
 import { createWorkoutPlan } from "@/lib/actions/workouts";
+import { useFormDraft } from "@/lib/hooks/useFormDraft";
+import { DRAFT_KEYS } from "@/lib/utils/draft";
 import {
 	createFitnessGoal,
 	getFitnessGoals,
@@ -110,16 +111,6 @@ export function WorkoutForm({
 		}
 	}, [exercisesList.length]);
 
-	const [formData, setFormData] = useState({
-		memberId: "",
-		name: "",
-		description: "",
-		difficulty: "BEGINNER",
-		goalId: "",
-		startDate: new Date().toISOString().split("T")[0],
-		endDate: "",
-	});
-
 	interface Exercise {
 		name: string;
 		sets: number;
@@ -134,21 +125,71 @@ export function WorkoutForm({
 		exercises: Exercise[];
 	}
 
-	const [days, setDays] = useState<Day[]>([
-		{
-			day: "Day 1",
-			exercises: [
-				{
-					name: "",
-					sets: 3,
-					reps: 10,
-					weight: 0,
-					restTime: 60,
-					notes: "",
-				},
-			],
-		},
-	]);
+	const defaultFormData = useMemo(
+		() => ({
+			memberId: "",
+			name: "",
+			description: "",
+			difficulty: "BEGINNER",
+			goalId: "",
+			startDate: new Date().toISOString().split("T")[0],
+			endDate: "",
+		}),
+		[]
+	);
+
+	type FormDataState = typeof defaultFormData;
+
+	const defaultDays = useMemo<Day[]>(
+		() => [
+			{
+				day: "Day 1",
+				exercises: [
+					{
+						name: "",
+						sets: 3,
+						reps: 10,
+						weight: 0,
+						restTime: 60,
+						notes: "",
+					},
+				],
+			},
+		],
+		[]
+	);
+
+	const { draft, saveDraft, clearDraft } = useFormDraft<{
+		formData: FormDataState;
+		days: Day[];
+	}>(DRAFT_KEYS.WORKOUT, { enabled: true, debounceMs: 600 });
+
+	const skipFirstSave = useRef(true);
+	const initialDraft = useMemo(() => {
+		const hasDraft = !!(draft?.formData || (draft?.days && draft.days.length > 0));
+		return {
+			formData: draft?.formData ?? defaultFormData,
+			days: draft?.days && draft.days.length > 0 ? draft.days : defaultDays,
+			hasDraft,
+		};
+	}, [draft, defaultFormData, defaultDays]);
+
+	const [formData, setFormData] = useState<FormDataState>(() => initialDraft.formData);
+	const [days, setDays] = useState<Day[]>(() => initialDraft.days);
+
+	useEffect(() => {
+		if (initialDraft.hasDraft) {
+			toast.info("Draft restored");
+		}
+	}, [initialDraft.hasDraft]);
+
+	useEffect(() => {
+		if (skipFirstSave.current) {
+			skipFirstSave.current = false;
+			return;
+		}
+		saveDraft({ formData, days });
+	}, [formData, days, saveDraft]);
 
 	const [selectedCategory] = useState("All");
 	const categories = [
@@ -268,6 +309,7 @@ export function WorkoutForm({
 		});
 
 		if (result?.success) {
+			clearDraft();
 			router.push("/workouts");
 			router.refresh();
 		} else {
@@ -822,7 +864,10 @@ export function WorkoutForm({
 				<Button
 					type="button"
 					variant="outline"
-					onClick={() => router.push("/workouts")}
+					onClick={() => {
+						clearDraft();
+						router.push("/workouts");
+					}}
 					disabled={loading}
 				>
 					Cancel

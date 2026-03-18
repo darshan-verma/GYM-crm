@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
 	Dialog,
@@ -25,6 +25,16 @@ import { toast } from "sonner";
 import { assignMembership } from "@/lib/actions/memberships";
 import { getMembershipPlans } from "@/lib/actions/memberships";
 import { formatCurrency } from "@/lib/utils/format";
+import { useFormDraft } from "@/lib/hooks/useFormDraft";
+import { DRAFT_KEYS } from "@/lib/utils/draft";
+
+interface AssignMembershipDraft {
+	selectedPlan?: string;
+	startDate?: string;
+	discount?: string;
+	discountType?: "PERCENTAGE" | "FIXED";
+	notes?: string;
+}
 
 interface AssignMembershipDialogProps {
 	memberId: string;
@@ -38,6 +48,13 @@ export default function AssignMembershipDialog({
 	onClose,
 }: AssignMembershipDialogProps) {
 	const router = useRouter();
+	const draftKey = DRAFT_KEYS.ASSIGN_MEMBERSHIP(memberId);
+	const { draft, saveDraft, clearDraft } = useFormDraft<AssignMembershipDraft>(
+		draftKey,
+		{ enabled: open, debounceMs: 600 }
+	);
+	const draftApplied = useRef(false);
+	const skipFirstSave = useRef(true);
 	const [loading, setLoading] = useState(false);
 	const [plans, setPlans] = useState<
 		{ id: string; name: string; price: number; duration: number }[]
@@ -57,6 +74,44 @@ export default function AssignMembershipDialog({
 			getMembershipPlans().then(setPlans);
 		}
 	}, [open]);
+
+	// Reset draft-applied and skip-first-save when dialog opens/closes or memberId changes
+	useEffect(() => {
+		if (!open) {
+			draftApplied.current = false;
+		} else {
+			skipFirstSave.current = true;
+		}
+	}, [open, memberId]);
+
+	// Apply draft when dialog opens and draft exists
+	useEffect(() => {
+		if (open && draft && !draftApplied.current) {
+			draftApplied.current = true;
+			if (draft.selectedPlan) setSelectedPlan(draft.selectedPlan);
+			if (draft.startDate) setStartDate(draft.startDate);
+			if (draft.discount != null) setDiscount(draft.discount);
+			if (draft.discountType) setDiscountType(draft.discountType);
+			if (draft.notes != null) setNotes(draft.notes);
+			toast.info("Draft restored");
+		}
+	}, [open, draft]);
+
+	// Save draft when form state changes (only when open; skip first run to avoid overwriting stored draft)
+	useEffect(() => {
+		if (!open) return;
+		if (skipFirstSave.current) {
+			skipFirstSave.current = false;
+			return;
+		}
+		saveDraft({
+			selectedPlan,
+			startDate,
+			discount,
+			discountType,
+			notes,
+		});
+	}, [open, selectedPlan, startDate, discount, discountType, notes, saveDraft]);
 
 	const selectedPlanData = plans.find((p) => p.id === selectedPlan);
 
@@ -90,6 +145,7 @@ export default function AssignMembershipDialog({
 			});
 
 			if (result.success) {
+				clearDraft();
 				toast.success("Membership assigned successfully");
 				onClose();
 				router.refresh();
@@ -222,7 +278,10 @@ export default function AssignMembershipDialog({
 						<Button
 							type="button"
 							variant="outline"
-							onClick={onClose}
+							onClick={() => {
+								clearDraft();
+								onClose();
+							}}
 							disabled={loading}
 							className="flex-1"
 						>

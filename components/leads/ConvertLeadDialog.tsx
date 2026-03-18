@@ -33,24 +33,10 @@ export default function ConvertLeadDialog({
 	const [loading, setLoading] = useState(false);
 
 	async function handleConfirm() {
-		setLoading(true);
-		try {
-			// Update lead status to CONVERTED
-			const result = await updateLeadStatus(leadId, "CONVERTED" as LeadStatus);
-			
-			if (result.success) {
-				toast.success("Lead converted successfully");
-				onOpenChange(false);
-				// Navigate to add member form with lead data
-				router.push(`/members/new?leadId=${leadId}`);
-			} else {
-				toast.error(result.error || "Failed to convert lead");
-			}
-		} catch (_error) {
-			toast.error("Failed to convert lead");
-		} finally {
-			setLoading(false);
-		}
+		// Important: do NOT mark the lead as CONVERTED yet.
+		// We only mark CONVERTED after the member is successfully created.
+		onOpenChange(false);
+		router.push(`/members/new?leadId=${leadId}`);
 	}
 
 	async function handleCancel() {

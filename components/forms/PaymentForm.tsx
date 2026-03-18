@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createPayment } from "@/lib/actions/payments";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,21 @@ import {
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/utils/format";
+import { useFormDraft } from "@/lib/hooks/useFormDraft";
+import { DRAFT_KEYS } from "@/lib/utils/draft";
+
+export interface PaymentFormDraft {
+	memberId?: string;
+	amount?: string;
+	discount?: string;
+	gstPercentage?: string;
+	nextDueAmount?: string;
+	nextDueDate?: string;
+	paymentMode?: string;
+	membershipId?: string;
+	gstNumber?: string;
+	notes?: string;
+}
 
 interface PaymentFormProps {
 	members: Array<{
@@ -44,15 +59,93 @@ export default function PaymentForm({
 	initialMemberId,
 }: PaymentFormProps) {
 	const router = useRouter();
+	const { draft, saveDraft, clearDraft } = useFormDraft<PaymentFormDraft>(
+		DRAFT_KEYS.PAYMENT,
+		{ enabled: true, debounceMs: 600 }
+	);
 	const [loading, setLoading] = useState(false);
 	const [selectedMember, setSelectedMember] = useState<string>(
-		initialMemberId || ""
+		draft?.memberId ?? initialMemberId ?? ""
 	);
-	const [amount, setAmount] = useState<string>("");
-	const [discount, setDiscount] = useState<string>("");
-	const [gstPercentage, setGstPercentage] = useState<string>("");
-	const [nextDueAmount, setNextDueAmount] = useState<string>("");
-	const [nextDueDate, setNextDueDate] = useState<string>("");
+	const [amount, setAmount] = useState<string>(draft?.amount ?? "");
+	const [discount, setDiscount] = useState<string>(draft?.discount ?? "");
+	const [gstPercentage, setGstPercentage] = useState<string>(
+		draft?.gstPercentage ?? ""
+	);
+	const [nextDueAmount, setNextDueAmount] = useState<string>(
+		draft?.nextDueAmount ?? ""
+	);
+	const [nextDueDate, setNextDueDate] = useState<string>(
+		draft?.nextDueDate ?? ""
+	);
+	const [paymentMode, setPaymentMode] = useState<string>(
+		draft?.paymentMode ?? ""
+	);
+	const [membershipId, setMembershipId] = useState<string>(
+		draft?.membershipId ?? ""
+	);
+	const [gstNumber, setGstNumber] = useState<string>(draft?.gstNumber ?? "");
+	const [notes, setNotes] = useState<string>(draft?.notes ?? "");
+	const draftApplied = useRef(false);
+	const skipFirstSave = useRef(true);
+
+	// Apply draft once when available (draft is loaded async)
+	useEffect(() => {
+		if (draft && !draftApplied.current) {
+			draftApplied.current = true;
+			if (draft.memberId) setSelectedMember(draft.memberId);
+			if (draft.amount != null) setAmount(draft.amount);
+			if (draft.discount != null) setDiscount(draft.discount);
+			if (draft.gstPercentage != null) setGstPercentage(draft.gstPercentage);
+			if (draft.nextDueAmount != null) setNextDueAmount(draft.nextDueAmount);
+			if (draft.nextDueDate != null) setNextDueDate(draft.nextDueDate);
+			if (draft.paymentMode != null) setPaymentMode(draft.paymentMode);
+			if (draft.membershipId != null) setMembershipId(draft.membershipId);
+			if (draft.gstNumber != null) setGstNumber(draft.gstNumber);
+			if (draft.notes != null) setNotes(draft.notes);
+			toast.info("Draft restored");
+		}
+	}, [draft]);
+
+	// When member changes, clear membershipId if it doesn't belong to the new member
+	useEffect(() => {
+		if (!selectedMember || !membershipId) return;
+		const member = members.find((m) => m.id === selectedMember);
+		const valid = member?.memberships.some((m) => m.id === membershipId);
+		if (!valid) setMembershipId("");
+	}, [selectedMember, members, membershipId]);
+
+	// Persist draft when state changes (skip first run to avoid overwriting stored draft)
+	useEffect(() => {
+		if (skipFirstSave.current) {
+			skipFirstSave.current = false;
+			return;
+		}
+		saveDraft({
+			memberId: selectedMember,
+			amount,
+			discount,
+			gstPercentage,
+			nextDueAmount,
+			nextDueDate,
+			paymentMode,
+			membershipId,
+			gstNumber,
+			notes,
+		});
+	}, [
+		selectedMember,
+		amount,
+		discount,
+		gstPercentage,
+		nextDueAmount,
+		nextDueDate,
+		paymentMode,
+		membershipId,
+		gstNumber,
+		notes,
+		saveDraft,
+	]);
 
 	const baseAmount = parseFloat(amount) || 0;
 	const discountAmount = parseFloat(discount) || 0;
@@ -132,6 +225,7 @@ export default function PaymentForm({
 			const result = await createPayment(data);
 
 			if (result.success) {
+				clearDraft();
 				toast.success("Payment recorded successfully");
 				router.push("/billing");
 				router.refresh();
@@ -222,7 +316,12 @@ export default function PaymentForm({
 				{selectedMemberData && selectedMemberData.memberships.length > 0 && (
 					<div className="space-y-2">
 						<Label htmlFor="membershipId">Membership (Optional)</Label>
-						<Select name="membershipId" disabled={loading}>
+						<input type="hidden" name="membershipId" value={membershipId} />
+						<Select
+							value={membershipId || "none"}
+							onValueChange={(v) => setMembershipId(v === "none" ? "" : v)}
+							disabled={loading}
+						>
 							<SelectTrigger>
 								<SelectValue placeholder="Select membership to renew" />
 							</SelectTrigger>
@@ -352,7 +451,13 @@ export default function PaymentForm({
 				{/* Payment Mode */}
 				<div className="space-y-2">
 					<Label htmlFor="paymentMode">Payment Mode *</Label>
-					<Select name="paymentMode" disabled={loading} required>
+					<input type="hidden" name="paymentMode" value={paymentMode} />
+					<Select
+						value={paymentMode}
+						onValueChange={setPaymentMode}
+						disabled={loading}
+						required
+					>
 						<SelectTrigger>
 							<SelectValue placeholder="Select payment mode" />
 						</SelectTrigger>
@@ -374,6 +479,8 @@ export default function PaymentForm({
 						name="gstNumber"
 						type="text"
 						placeholder="22AAAAA0000A1Z5"
+						value={gstNumber}
+						onChange={(e) => setGstNumber(e.target.value)}
 						disabled={loading}
 					/>
 				</div>
@@ -480,6 +587,8 @@ export default function PaymentForm({
 					id="notes"
 					name="notes"
 					placeholder="Payment notes"
+					value={notes}
+					onChange={(e) => setNotes(e.target.value)}
 					disabled={loading}
 					rows={3}
 				/>
@@ -495,7 +604,14 @@ export default function PaymentForm({
 					{loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
 					Record Payment
 				</Button>
-				<Button type="button" variant="outline" onClick={() => router.back()}>
+				<Button
+					type="button"
+					variant="outline"
+					onClick={() => {
+						clearDraft();
+						router.back();
+					}}
+				>
 					Cancel
 				</Button>
 			</div>

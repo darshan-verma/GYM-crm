@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { getTrainers } from "@/lib/actions/members";
 import { getMembershipPlans } from "@/lib/actions/memberships";
 import { getLeadById } from "@/lib/actions/leads";
-import MemberForm from "@/components/forms/MemberForm";
+import NewMemberFormWrapper from "@/components/forms/NewMemberFormWrapper";
+import { DRAFT_KEYS } from "@/lib/utils/draft";
 import {
 	Card,
 	CardContent,
@@ -59,9 +60,11 @@ export default async function NewMemberPage({
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<MemberForm
+					<NewMemberFormWrapper
 						trainers={trainers}
 						membershipPlans={membershipPlans}
+						leadId={leadId}
+						draftKey={leadId ? DRAFT_KEYS.MEMBER_FROM_LEAD(leadId) : DRAFT_KEYS.MEMBER_NEW}
 						leadData={
 							lead
 								? {

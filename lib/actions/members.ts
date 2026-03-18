@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { put } from "@vercel/blob";
 import prisma from "@/lib/db/prisma";
 import { auth } from "@/lib/auth";
-import { MembershipStatus } from "@prisma/client";
+import { MembershipStatus, Prisma } from "@prisma/client";
 import { createNewMemberNotification } from "./notifications";
 import { createActivityLog } from "@/lib/utils/activityLog";
 import { requireCurrentGymProfileId } from "./gym-profiles";
@@ -15,12 +15,33 @@ function isSuperAdmin(
 	return session?.user?.role === "SUPER_ADMIN";
 }
 
+/** Highest numeric suffix among PBF#### numbers globally (membershipNumber is @unique on Member). */
+async function getMaxMembershipSequence(
+	client: Pick<typeof prisma, "member">
+): Promise<number> {
+	const rows = await client.member.findMany({
+		select: { membershipNumber: true },
+	});
+	let max = 1000;
+	for (const { membershipNumber: s } of rows) {
+		if (typeof s !== "string" || !s.startsWith("PBF")) continue;
+		const rest = s.slice(3);
+		if (!/^\d+$/.test(rest)) continue;
+		const n = parseInt(rest, 10);
+		if (!Number.isNaN(n) && n > max) max = n;
+	}
+	return max;
+}
+
 export async function createMember(formData: FormData) {
 	const session = await auth();
 	if (!session) throw new Error("Unauthorized");
 	const gymProfileId = await requireCurrentGymProfileId(session);
 
 	try {
+		const leadIdRaw = (formData.get("leadId") as string | null) ?? null;
+		const leadId = leadIdRaw && leadIdRaw.trim() ? leadIdRaw.trim() : null;
+
 		const latitudeStr = formData.get("latitude") as string;
 		const longitudeStr = formData.get("longitude") as string;
 		const formattedAddress = (formData.get("formattedAddress") as string) || null;
@@ -119,50 +140,83 @@ export async function createMember(formData: FormData) {
 			}
 		}
 
-		// Generate membership number
-		const lastMember = await prisma.member.findFirst({
-			where: { gymProfileId },
-			orderBy: { createdAt: "desc" },
-			select: { membershipNumber: true },
-		});
+		// DB writes: member + membership (+ optional lead conversion) should be consistent.
+		const { member, membershipNumber } = await prisma.$transaction(async (tx) => {
+			// Next membership number = global max(PBF####) + 1 (membershipNumber is unique across all gyms).
+			let seq = (await getMaxMembershipSequence(tx)) + 1;
+			let membershipNumberLocal = `PBF${String(seq).padStart(4, "0")}`;
 
-		const lastNumber = lastMember
-			? parseInt(lastMember.membershipNumber.slice(3))
-			: 1000;
-
-		const membershipNumber = `PBF${String(lastNumber + 1).padStart(4, "0")}`;
-
-		const member = await prisma.member.create({
-			data: {
+			const createData = {
 				...data,
 				gymProfileId,
-				membershipNumber,
 				photo: photoPath,
 				dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
-				status: membershipPlanId ? "ACTIVE" : "PENDING",
-			},
-			include: {
-				trainer: { select: { name: true } },
-			},
-		});
+				status: membershipPlanId ? ("ACTIVE" as const) : ("PENDING" as const),
+			};
 
-		// Create membership (plan is already validated above)
-		const startDate = new Date();
-		const endDate = new Date(startDate);
-		endDate.setDate(startDate.getDate() + membershipPlan.duration);
+			type CreatedMember = Awaited<ReturnType<typeof prisma.member.create>>;
+			let createdMember: CreatedMember | undefined;
+			const maxAttempts = 8;
+			for (let attempt = 0; attempt < maxAttempts; attempt++) {
+				try {
+					createdMember = await tx.member.create({
+						data: {
+							...createData,
+							membershipNumber: membershipNumberLocal,
+						},
+						include: {
+							trainer: { select: { name: true } },
+						},
+					});
+					break;
+				} catch (err) {
+					if (
+						!(err instanceof Prisma.PrismaClientKnownRequestError) ||
+						err.code !== "P2002" ||
+						attempt === maxAttempts - 1
+					) {
+						throw err;
+					}
+					seq += 1;
+					membershipNumberLocal = `PBF${String(seq).padStart(4, "0")}`;
+				}
+			}
+			if (!createdMember) {
+				throw new Error("Could not allocate a unique membership number");
+			}
 
-		await prisma.membership.create({
-			data: {
-				memberId: member.id,
-				planId: membershipPlanId,
-				startDate,
-				endDate,
-				amount: membershipPlan.price,
-				finalAmount: membershipPlan.price,
-				active: true,
-				autoRenew: false,
-				gymProfileId,
-			},
+			// Create membership (plan is already validated above)
+			const startDate = new Date();
+			const endDate = new Date(startDate);
+			endDate.setDate(startDate.getDate() + membershipPlan.duration);
+
+			await tx.membership.create({
+				data: {
+					memberId: createdMember.id,
+					planId: membershipPlanId,
+					startDate,
+					endDate,
+					amount: membershipPlan.price,
+					finalAmount: membershipPlan.price,
+					active: true,
+					autoRenew: false,
+					gymProfileId,
+				},
+			});
+
+			// If member was created from a lead conversion flow, mark lead as converted now.
+			if (leadId) {
+				await tx.lead.updateMany({
+					where: { id: leadId, gymProfileId },
+					data: {
+						status: "CONVERTED",
+						convertedDate: new Date(),
+						lastContactDate: new Date(),
+					},
+				});
+			}
+
+			return { member: createdMember, membershipNumber: membershipNumberLocal };
 		});
 
 		// Log activity (don't fail if logging fails)
@@ -178,6 +232,17 @@ export async function createMember(formData: FormData) {
 			},
 		});
 
+		if (leadId) {
+			// Best-effort audit log for the lead conversion.
+			await createActivityLog({
+				userId: session.user.id,
+				action: "UPDATE",
+				entity: "Lead",
+				entityId: leadId,
+				details: { status: "CONVERTED", memberId: member.id },
+			});
+		}
+
 		// Create notification for new member (don't fail if this fails)
 		try {
 			await createNewMemberNotification(member.id, member.name, membershipNumber);
@@ -187,6 +252,7 @@ export async function createMember(formData: FormData) {
 		}
 
 		revalidatePath("/members");
+		if (leadId) revalidatePath("/leads");
 		return { success: true, data: member };
 	} catch (error) {
 		console.error("Create member error:", error);

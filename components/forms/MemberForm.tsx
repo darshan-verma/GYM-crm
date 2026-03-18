@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { createMember, updateMember } from "@/lib/actions/members";
@@ -18,6 +18,37 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import LocationPicker from "./LocationPicker";
+
+const PHOTO_DRAFT_MAX_BYTES = 200 * 1024;
+
+export interface MemberFormDraft {
+	name?: string;
+	phone?: string;
+	email?: string;
+	dateOfBirth?: string;
+	gender?: string;
+	bloodGroup?: string;
+	address?: string;
+	city?: string;
+	state?: string;
+	pincode?: string;
+	medicalConditions?: string;
+	emergencyName?: string;
+	emergencyContact?: string;
+	trainerId?: string;
+	membershipPlanId?: string;
+	notes?: string;
+	photoPreview?: string;
+	locationData?: {
+		address: string;
+		formattedAddress: string;
+		latitude: number;
+		longitude: number;
+		city?: string;
+		state?: string;
+		pincode?: string;
+	} | null;
+}
 
 export interface Member {
 	id: string;
@@ -57,10 +88,106 @@ interface MemberFormProps {
 	}>;
 	initialData?: Member;
 	isEdit?: boolean;
+	leadId?: string;
 	leadData?: {
 		name?: string;
 		phone?: string;
 		email?: string;
+	};
+	initialFromDraft?: MemberFormDraft | null;
+	onSaveDraft?: (data: MemberFormDraft) => void;
+	onClearDraft?: () => void;
+}
+
+function getInitialValues(
+	initialData?: Member,
+	leadData?: { name?: string; phone?: string; email?: string },
+	draft?: MemberFormDraft | null
+) {
+	if (draft) {
+		return {
+			name: draft.name ?? leadData?.name ?? "",
+			phone: draft.phone ?? leadData?.phone ?? "",
+			email: draft.email ?? leadData?.email ?? "",
+			dateOfBirth: draft.dateOfBirth ?? "",
+			gender: draft.gender ?? "",
+			bloodGroup: draft.bloodGroup ?? "",
+			address: draft.address ?? "",
+			city: draft.city ?? "",
+			state: draft.state ?? "",
+			pincode: draft.pincode ?? "",
+			medicalConditions: draft.medicalConditions ?? "",
+			emergencyName: draft.emergencyName ?? "",
+			emergencyContact: draft.emergencyContact ?? "",
+			trainerId: draft.trainerId ?? "none",
+			membershipPlanId: draft.membershipPlanId ?? "",
+			notes: draft.notes ?? "",
+			photoPreview: draft.photoPreview ?? "",
+			locationData: draft.locationData ?? null,
+		};
+	}
+	if (initialData) {
+		return {
+			name: initialData.name,
+			phone: initialData.phone,
+			email: initialData.email ?? "",
+			dateOfBirth: initialData.dateOfBirth
+				? new Date(initialData.dateOfBirth).toISOString().split("T")[0]
+				: "",
+			gender: initialData.gender ?? "",
+			bloodGroup: initialData.bloodGroup ?? "",
+			address: initialData.address ?? "",
+			city: initialData.city ?? "",
+			state: initialData.state ?? "",
+			pincode: initialData.pincode ?? "",
+			medicalConditions: initialData.medicalConditions ?? "",
+			emergencyName: initialData.emergencyName ?? "",
+			emergencyContact: initialData.emergencyContact ?? "",
+			trainerId: initialData.trainerId ?? "none",
+			membershipPlanId: initialData.membershipPlanId ?? "",
+			notes: initialData.notes ?? "",
+			photoPreview: initialData.photo ?? "",
+			locationData:
+				initialData?.latitude != null && initialData?.longitude != null
+					? {
+							address: initialData.formattedAddress || initialData.address || "",
+							formattedAddress: initialData.formattedAddress || initialData.address || "",
+							latitude: initialData.latitude,
+							longitude: initialData.longitude,
+							city: initialData.city,
+							state: initialData.state,
+							pincode: initialData.pincode,
+					  }
+					: null,
+		};
+	}
+	return {
+		name: leadData?.name ?? "",
+		phone: leadData?.phone ?? "",
+		email: leadData?.email ?? "",
+		dateOfBirth: "",
+		gender: "",
+		bloodGroup: "",
+		address: "",
+		city: "",
+		state: "",
+		pincode: "",
+		medicalConditions: "",
+		emergencyName: "",
+		emergencyContact: "",
+		trainerId: "none",
+		membershipPlanId: "",
+		notes: "",
+		photoPreview: "",
+		locationData: null as {
+			address: string;
+			formattedAddress: string;
+			latitude: number;
+			longitude: number;
+			city?: string;
+			state?: string;
+			pincode?: string;
+		} | null,
 	};
 }
 
@@ -69,15 +196,20 @@ export default function MemberForm({
 	membershipPlans = [],
 	initialData,
 	isEdit = false,
+	leadId,
 	leadData,
+	initialFromDraft,
+	onSaveDraft,
+	onClearDraft,
 }: MemberFormProps) {
 	const router = useRouter();
+	const formRef = useRef<HTMLFormElement>(null);
+	const initial = getInitialValues(initialData, leadData, initialFromDraft);
 	const [loading, setLoading] = useState(false);
-	// Always start with empty string for new members, only use initialData for edit mode
 	const [selectedMembershipPlan, setSelectedMembershipPlan] = useState<string>(
-		isEdit && initialData?.membershipPlanId ? initialData.membershipPlanId : ""
+		isEdit && initialData?.membershipPlanId ? initialData.membershipPlanId : initial.membershipPlanId
 	);
-	const [photoPreview, setPhotoPreview] = useState(initialData?.photo || "");
+	const [photoPreview, setPhotoPreview] = useState(initial.photoPreview);
 	const [locationData, setLocationData] = useState<{
 		address: string;
 		formattedAddress: string;
@@ -86,19 +218,71 @@ export default function MemberForm({
 		city?: string;
 		state?: string;
 		pincode?: string;
-	} | null>(
-		initialData?.latitude && initialData?.longitude
-			? {
-					address: initialData.formattedAddress || initialData.address || "",
-					formattedAddress: initialData.formattedAddress || initialData.address || "",
-					latitude: initialData.latitude,
-					longitude: initialData.longitude,
-					city: initialData.city,
-					state: initialData.state,
-					pincode: initialData.pincode,
-			  }
-			: null
-	);
+	} | null>(initial.locationData);
+
+	// Restore draft toast (once)
+	const [draftRestored, setDraftRestored] = useState(false);
+	useEffect(() => {
+		if (initialFromDraft && !draftRestored && !isEdit) {
+			toast.info("Draft restored");
+			setDraftRestored(true);
+		}
+	}, [initialFromDraft, draftRestored, isEdit]);
+
+	// Debounced draft save when form changes
+	const saveDraftFromForm = useCallback(() => {
+		if (!formRef.current || !onSaveDraft || isEdit) return;
+		const form = formRef.current;
+		const fd = new FormData(form);
+		const photo =
+			typeof photoPreview === "string" && photoPreview.length > 0 && photoPreview.length < PHOTO_DRAFT_MAX_BYTES
+				? photoPreview
+				: undefined;
+		onSaveDraft({
+			name: (fd.get("name") as string) ?? "",
+			phone: (fd.get("phone") as string) ?? "",
+			email: (fd.get("email") as string) ?? "",
+			dateOfBirth: (fd.get("dateOfBirth") as string) ?? "",
+			gender: (fd.get("gender") as string) ?? "",
+			bloodGroup: (fd.get("bloodGroup") as string) ?? "",
+			address: (fd.get("address") as string) ?? "",
+			city: (fd.get("city") as string) ?? "",
+			state: (fd.get("state") as string) ?? "",
+			pincode: (fd.get("pincode") as string) ?? "",
+			medicalConditions: (fd.get("medicalConditions") as string) ?? "",
+			emergencyName: (fd.get("emergencyName") as string) ?? "",
+			emergencyContact: (fd.get("emergencyContact") as string) ?? "",
+			trainerId: (fd.get("trainerId") as string) ?? "none",
+			membershipPlanId: selectedMembershipPlan || "",
+			notes: (fd.get("notes") as string) ?? "",
+			photoPreview: photo,
+			locationData,
+		});
+	}, [
+		selectedMembershipPlan,
+		photoPreview,
+		locationData,
+		onSaveDraft,
+		isEdit,
+	]);
+
+	useEffect(() => {
+		if (!onSaveDraft || isEdit) return;
+		const form = formRef.current;
+		if (!form) return;
+		const handleChange = () => {
+			if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+			saveTimeoutRef.current = setTimeout(saveDraftFromForm, 600);
+		};
+		const saveTimeoutRef = { current: null as ReturnType<typeof setTimeout> | null };
+		form.addEventListener("input", handleChange);
+		form.addEventListener("change", handleChange);
+		return () => {
+			form.removeEventListener("input", handleChange);
+			form.removeEventListener("change", handleChange);
+			if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+		};
+	}, [onSaveDraft, isEdit, saveDraftFromForm]);
 
 	async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
 		e.preventDefault();
@@ -171,6 +355,7 @@ export default function MemberForm({
 				: await createMember(formData);
 
 			if (result.success && result.data) {
+				if (!isEdit) onClearDraft?.();
 				toast.success(
 					isEdit ? "Member updated successfully" : "Member created successfully"
 				);
@@ -198,7 +383,8 @@ export default function MemberForm({
 	}
 
 	return (
-		<form onSubmit={handleSubmit} className="space-y-6">
+		<form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
+			{leadId ? <input type="hidden" name="leadId" value={leadId} /> : null}
 			{/* Photo Upload */}
 			<div className="space-y-2">
 				<Label>Profile Photo</Label>
@@ -234,7 +420,7 @@ export default function MemberForm({
 					<Input
 						id="name"
 						name="name"
-						defaultValue={initialData?.name || leadData?.name}
+						defaultValue={initial.name}
 						required
 						disabled={loading}
 						placeholder="John Doe"
@@ -247,7 +433,7 @@ export default function MemberForm({
 						id="phone"
 						name="phone"
 						type="tel"
-						defaultValue={initialData?.phone || leadData?.phone}
+						defaultValue={initial.phone}
 						required
 						disabled={loading}
 						placeholder="+91 9876543210"
@@ -260,7 +446,7 @@ export default function MemberForm({
 						id="email"
 						name="email"
 						type="email"
-						defaultValue={initialData?.email || leadData?.email}
+						defaultValue={initial.email}
 						disabled={loading}
 						placeholder="john@example.com"
 					/>
@@ -272,11 +458,7 @@ export default function MemberForm({
 						id="dateOfBirth"
 						name="dateOfBirth"
 						type="date"
-						defaultValue={
-							initialData?.dateOfBirth
-								? new Date(initialData.dateOfBirth).toISOString().split("T")[0]
-								: ""
-						}
+						defaultValue={initial.dateOfBirth}
 						disabled={loading}
 					/>
 				</div>
@@ -285,7 +467,7 @@ export default function MemberForm({
 					<Label htmlFor="gender">Gender</Label>
 					<Select
 						name="gender"
-						defaultValue={initialData?.gender || ""}
+						defaultValue={initial.gender}
 						disabled={loading}
 					>
 						<SelectTrigger>
@@ -303,7 +485,7 @@ export default function MemberForm({
 					<Label htmlFor="bloodGroup">Blood Group</Label>
 					<Select
 						name="bloodGroup"
-						defaultValue={initialData?.bloodGroup || ""}
+						defaultValue={initial.bloodGroup}
 						disabled={loading}
 					>
 						<SelectTrigger>
@@ -330,7 +512,7 @@ export default function MemberForm({
 					<Input
 						id="address"
 						name="address"
-						defaultValue={initialData?.address}
+						defaultValue={initial.address}
 						disabled={loading}
 						placeholder="Street address or select location on map"
 					/>
@@ -345,7 +527,7 @@ export default function MemberForm({
 						<Input
 							id="city"
 							name="city"
-							defaultValue={initialData?.city}
+							defaultValue={initial.city}
 							disabled={loading}
 							placeholder="City"
 						/>
@@ -356,7 +538,7 @@ export default function MemberForm({
 						<Input
 							id="state"
 							name="state"
-							defaultValue={initialData?.state}
+							defaultValue={initial.state}
 							disabled={loading}
 							placeholder="State"
 						/>
@@ -367,7 +549,7 @@ export default function MemberForm({
 						<Input
 							id="pincode"
 							name="pincode"
-							defaultValue={initialData?.pincode}
+							defaultValue={initial.pincode}
 							disabled={loading}
 							placeholder="400001"
 						/>
@@ -378,11 +560,11 @@ export default function MemberForm({
 				<LocationPicker
 					onLocationChange={setLocationData}
 					initialLocation={
-						initialData?.latitude && initialData?.longitude
+						initial.locationData
 							? {
-									formattedAddress: initialData.formattedAddress || undefined,
-									latitude: initialData.latitude,
-									longitude: initialData.longitude,
+									formattedAddress: initial.locationData.formattedAddress,
+									latitude: initial.locationData.latitude,
+									longitude: initial.locationData.longitude,
 							  }
 							: undefined
 					}
@@ -400,7 +582,7 @@ export default function MemberForm({
 					<Textarea
 						id="medicalConditions"
 						name="medicalConditions"
-						defaultValue={initialData?.medicalConditions}
+						defaultValue={initial.medicalConditions}
 						disabled={loading}
 						rows={3}
 						placeholder="Any medical conditions or allergies..."
@@ -417,7 +599,7 @@ export default function MemberForm({
 						<Input
 							id="emergencyName"
 							name="emergencyName"
-							defaultValue={initialData?.emergencyName}
+							defaultValue={initial.emergencyName}
 							disabled={loading}
 							placeholder="Contact person name"
 						/>
@@ -429,7 +611,7 @@ export default function MemberForm({
 							id="emergencyContact"
 							name="emergencyContact"
 							type="tel"
-							defaultValue={initialData?.emergencyContact}
+							defaultValue={initial.emergencyContact}
 							disabled={loading}
 							placeholder="+91 9876543210"
 						/>
@@ -445,7 +627,7 @@ export default function MemberForm({
 						<Label htmlFor="trainerId">Assigned Trainer</Label>
 						<Select
 							name="trainerId"
-							defaultValue={initialData?.trainerId || "none"}
+							defaultValue={initial.trainerId}
 							disabled={loading}
 						>
 							<SelectTrigger>
@@ -513,7 +695,7 @@ export default function MemberForm({
 					<Textarea
 						id="notes"
 						name="notes"
-						defaultValue={initialData?.notes}
+						defaultValue={initial.notes}
 						disabled={loading}
 						rows={3}
 						placeholder="Any additional notes about the member..."
@@ -526,7 +708,10 @@ export default function MemberForm({
 				<Button
 					type="button"
 					variant="outline"
-					onClick={() => router.back()}
+					onClick={() => {
+						if (!isEdit) onClearDraft?.();
+						router.back();
+					}}
 					disabled={loading}
 					className="flex-1"
 				>

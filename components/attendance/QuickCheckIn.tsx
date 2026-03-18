@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { quickCheckIn } from "@/lib/actions/attendance";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,37 +15,64 @@ import { toast } from "sonner";
 import { Loader2, Scan } from "lucide-react";
 
 export default function QuickCheckIn() {
-	const [loading, setLoading] = useState(false);
 	const [membershipNumber, setMembershipNumber] = useState("");
+	const [isProcessing, setIsProcessing] = useState(false);
+	const [queuedCount, setQueuedCount] = useState(0);
 	const inputRef = useRef<HTMLInputElement>(null);
+	const queueRef = useRef<string[]>([]);
+	const processingRef = useRef(false);
+
+	useEffect(() => {
+		setQueuedCount(queueRef.current.length);
+	}, []);
+
+	const startProcessorIfNeeded = async () => {
+		if (processingRef.current) return;
+		processingRef.current = true;
+		setIsProcessing(true);
+
+		try {
+			while (queueRef.current.length > 0) {
+				const next = queueRef.current.shift();
+				setQueuedCount(queueRef.current.length);
+				if (!next) continue;
+
+				try {
+					const result = await quickCheckIn(next);
+					if (result.success) {
+						toast.success("Check-In Successful", {
+							description: `Member ${next} checked in at ${new Date().toLocaleTimeString()}`,
+						});
+					} else {
+						toast.error("Check-In Failed", {
+							description: result.error,
+						});
+					}
+				} catch (_error) {
+					toast.error("Error", {
+						description: `Failed to check in ${next}`,
+					});
+				}
+			}
+		} finally {
+			processingRef.current = false;
+			setIsProcessing(false);
+			setQueuedCount(queueRef.current.length);
+		}
+	};
 
 	async function handleCheckIn(e: React.FormEvent) {
 		e.preventDefault();
-		if (!membershipNumber.trim()) return;
+		const next = membershipNumber.trim().toUpperCase();
+		if (!next) return;
 
-		setLoading(true);
+		// Optimistic: clear immediately so scanning can continue.
+		setMembershipNumber("");
+		inputRef.current?.focus();
 
-		try {
-			const result = await quickCheckIn(membershipNumber.trim());
-
-			if (result.success) {
-				toast.success("Check-In Successful", {
-					description: `Member ${membershipNumber} checked in at ${new Date().toLocaleTimeString()}`,
-				});
-				setMembershipNumber("");
-				inputRef.current?.focus();
-			} else {
-				toast.error("Check-In Failed", {
-					description: result.error,
-				});
-			}
-		} catch (_error) {
-			toast.error("Error", {
-				description: "Failed to check in member",
-			});
-		} finally {
-			setLoading(false);
-		}
+		queueRef.current.push(next);
+		setQueuedCount(queueRef.current.length);
+		void startProcessorIfNeeded();
 	}
 
 	return (
@@ -63,7 +90,12 @@ export default function QuickCheckIn() {
 			</CardHeader>
 			<CardContent>
 				<form onSubmit={handleCheckIn} className="space-y-4">
-					<div className="flex gap-2">
+					<div
+						className={[
+							"flex gap-2",
+							isProcessing ? "opacity-90" : "",
+						].join(" ")}
+					>
 						<Input
 							ref={inputRef}
 							type="text"
@@ -72,17 +104,22 @@ export default function QuickCheckIn() {
 							onChange={(e) =>
 								setMembershipNumber(e.target.value.toUpperCase())
 							}
-							disabled={loading}
 							className="flex-1 text-lg"
 							autoFocus
 						/>
 						<Button
 							type="submit"
-							disabled={loading || !membershipNumber.trim()}
+							disabled={!membershipNumber.trim()}
 							className="bg-gradient-to-r from-green-600 to-green-700"
 						>
-							{loading ? (
-								<Loader2 className="w-4 h-4 animate-spin" />
+							{isProcessing ? (
+								<span className="inline-flex items-center gap-2">
+									<Loader2 className="w-4 h-4 animate-spin" />
+									Processing
+									{queuedCount > 0 ? ` (${queuedCount})` : ""}
+								</span>
+							) : queuedCount > 0 ? (
+								<span>Queued ({queuedCount})</span>
 							) : (
 								"Check In"
 							)}
